@@ -1,0 +1,47 @@
+# Book Factory Configuration
+
+# API Keys (set via environment variables for security)
+# OPENAI_API_KEY and ANTHROPIC_API_KEY should be set in your shell
+
+# KDP Account
+kdp:
+  email: ""  # Set before first publish
+  password: ""  # Set before first publish
+
+# Defaults
+defaults:
+  trim_size: "8.5x8.5"
+  age_range: "3-6"
+  price_paperback: 9.99
+  price_ebook: 4.99
+  royalty_plan: "70%"
+  author_name: "Starlit Stories Press"
+  publisher: "Starlit Stories Press"
+  drm: true
+
+# Art Style
+art:
+  style: "Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children's book illustrations. NOT digital vector, NOT 3D, NOT photorealistic, NOT anime."
+  quality: "high"
+  retries: 3
+  qa_enabled: true
+  eye_instruction: "CRITICAL — CHARACTER EYES: Large, round, dark brown irises. Each eye MUST have TWO small bright white highlight dots (one larger catch-light, one smaller). Do NOT make eyes solid black."
+
+# Niche Research
+research:
+  min_bsr: 100000
+  max_competition_reviews: 50
+  focus_categories:
+    - "Children's Animal Books"
+    - "Children's Bedtime & Dreams"
+    - "Children's Friendship Books"
+    - "Children's Self-Esteem Books"
+    - "Children's Emotions Books"
+    - "Children's Rhyming Books"
+
+# Pipeline
+pipeline:
+  parallel_books: 1  # How many books to generate simultaneously
+  skip_research: false
+  skip_publish: false
+  auto_upload_art: false  # Set true if art pipeline runs locally
