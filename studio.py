@@ -761,13 +761,12 @@ print(f"3. Run: python3 studio.py --pdf-only {book_id}")
         with open(story_path, 'r') as f:
             story = json.load(f)
 
-        # Check for KDP credentials
-        kdp_email = self.config.get("kdp.email")
-        kdp_password = self.config.get("kdp.password")
+        # Check for KDP publishing readiness
+        use_chrome = self.config.get("kdp.use_chrome_profile", True)
 
-        if not kdp_email or not kdp_password:
-            print_warning("KDP credentials not configured")
-            print_warning("Set kdp.email and kdp.password in config/studio_config.yaml")
+        if not use_chrome:
+            print_warning("KDP publishing not configured")
+            print_warning("Set kdp.use_chrome_profile: true in config/studio_config.yaml")
             publish_result = {
                 "status": "skipped_no_credentials",
                 "message": "Configure KDP credentials to enable publishing",

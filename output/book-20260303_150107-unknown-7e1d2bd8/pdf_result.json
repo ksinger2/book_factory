@@ -1,0 +1,10 @@
+{
+  "book_id": "Shelly's Ocean Journey",
+  "pages": 24,
+  "paperback_pdf": "output/book-20260303_150107-unknown-7e1d2bd8/pdfs/paperback.pdf",
+  "ebook_pdf": "output/book-20260303_150107-unknown-7e1d2bd8/pdfs/ebook.pdf",
+  "cover_pdf": "output/book-20260303_150107-unknown-7e1d2bd8/pdfs/cover.pdf",
+  "trim_size": "8.5x8.5",
+  "status": "ready_for_publishing",
+  "timestamp": "2026-03-03T15:01:07.478284"
+}

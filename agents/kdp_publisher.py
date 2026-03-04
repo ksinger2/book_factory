@@ -68,16 +68,23 @@ class KDPPublisher:
     WAIT_LONG = 10
     WAIT_FILE_UPLOAD = 15
 
-    def __init__(self, headless: bool = False, debug: bool = False):
-        """Initialize KDP Publisher"""
-        self.headless = headless
+    def __init__(self, headless: bool = False, debug: bool = False, use_chrome_profile: bool = True):
+        """Initialize KDP Publisher
+
+        Args:
+            headless: Run browser without GUI (won't work with use_chrome_profile)
+            debug: Enable verbose logging
+            use_chrome_profile: Launch using user's existing Chrome profile (reuses their KDP login)
+        """
+        self.headless = headless if not use_chrome_profile else False  # Chrome profile needs GUI
         self.debug = debug
+        self.use_chrome_profile = use_chrome_profile
         self.playwright = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self.session_file = Path("kdp_session.json")
-        logger.info(f"KDPPublisher initialized (headless={headless}, debug={debug})")
+        logger.info(f"KDPPublisher initialized (headless={headless}, debug={debug}, chrome_profile={use_chrome_profile})")
 
     def __enter__(self):
         """Context manager entry"""
@@ -88,13 +95,70 @@ class KDPPublisher:
         """Context manager exit"""
         self.stop()
 
+    def _find_chrome_profile(self) -> Optional[str]:
+        """Find the user's default Chrome profile directory"""
+        import platform
+        system = platform.system()
+
+        candidates = []
+        if system == "Darwin":  # macOS
+            import os
+            home = os.path.expanduser("~")
+            candidates = [
+                f"{home}/Library/Application Support/Google/Chrome",
+                f"{home}/Library/Application Support/Google/Chrome Canary",
+            ]
+        elif system == "Linux":
+            import os
+            home = os.path.expanduser("~")
+            candidates = [
+                f"{home}/.config/google-chrome",
+                f"{home}/.config/chromium",
+            ]
+        elif system == "Windows":
+            import os
+            local = os.environ.get("LOCALAPPDATA", "")
+            candidates = [
+                f"{local}\\Google\\Chrome\\User Data",
+            ]
+
+        for path in candidates:
+            if Path(path).exists():
+                logger.info(f"Found Chrome profile at: {path}")
+                return path
+
+        logger.warning("No Chrome profile found")
+        return None
+
     def start(self):
-        """Start Playwright and browser"""
+        """Start Playwright and browser.
+
+        If use_chrome_profile=True, launches Chromium using the user's existing
+        Chrome profile so their KDP login session is already active.
+        NOTE: Chrome must be fully closed before launching (can't share profile).
+        """
         logger.info("Starting Playwright browser...")
         self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=self.headless)
 
-        # Create context with session persistence
+        if self.use_chrome_profile:
+            chrome_profile = self._find_chrome_profile()
+            if chrome_profile:
+                logger.info(f"Launching with Chrome profile: {chrome_profile}")
+                logger.info("NOTE: Close all Chrome windows first — Playwright needs exclusive access to the profile.")
+                self.context = self.playwright.chromium.launch_persistent_context(
+                    user_data_dir=chrome_profile,
+                    channel="chrome",  # Use installed Chrome, not bundled Chromium
+                    headless=False,
+                    args=["--disable-blink-features=AutomationControlled"],
+                )
+                self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
+                logger.info("Browser started with existing Chrome profile (KDP login should be active)")
+                return
+            else:
+                logger.warning("Chrome profile not found — falling back to fresh browser")
+
+        # Fallback: fresh Playwright browser with optional session file
+        self.browser = self.playwright.chromium.launch(headless=self.headless)
         context_args = {
             'storage_state': str(self.session_file) if self.session_file.exists() else None
         }

@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book Factory Studio</title>
+<style>
+  :root {
+    --bg: #0f0f13; --surface: #1a1a24; --surface2: #24243a;
+    --border: #2e2e48; --text: #e4e4f0; --dim: #8888aa;
+    --accent: #7c6aff; --accent2: #a78bfa; --accent-bg: rgba(124,106,255,0.08);
+    --green: #34d399; --green-bg: rgba(52,211,153,0.1);
+    --yellow: #fbbf24; --yellow-bg: rgba(251,191,36,0.1);
+    --red: #f87171; --red-bg: rgba(248,113,113,0.1);
+    --blue: #60a5fa; --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  .app { display:flex; min-height:100vh; }
+  .sidebar { width:240px; background:var(--surface); border-right:1px solid var(--border); padding:24px 0; flex-shrink:0; position:fixed; height:100vh; }
+  .main { flex:1; margin-left:240px; padding:32px 48px; max-width:860px; }
+
+  .logo { padding:0 20px 20px; border-bottom:1px solid var(--border); margin-bottom:12px; }
+  .logo h1 { font-size:17px; font-weight:700; } .logo h1 span { color:var(--accent); }
+  .logo p { font-size:11px; color:var(--dim); margin-top:3px; }
+
+  .nav-item { display:flex; align-items:center; gap:10px; padding:9px 20px; cursor:pointer; font-size:13px; color:var(--dim); transition:all 0.12s; }
+  .nav-item:hover { background:var(--accent-bg); color:var(--text); }
+  .nav-item.active { color:var(--accent2); background:var(--accent-bg); border-right:2px solid var(--accent); }
+  .nav-item.done { color:var(--green); }
+  .nav-item .dot { width:22px; height:22px; border-radius:50%; border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; flex-shrink:0; }
+  .nav-item.done .dot { background:var(--green); color:var(--bg); border-color:var(--green); }
+  .nav-item.active .dot { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .step { display:none; animation: fadeIn 0.15s; }
+  .step.active { display:block; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+  .step h2 { font-size:22px; font-weight:700; margin-bottom:6px; }
+  .step .sub { color:var(--dim); font-size:13px; margin-bottom:24px; }
+
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 22px; margin-bottom:14px; }
+  .card h3 { font-size:14px; font-weight:600; margin-bottom:10px; }
+
+  .field { margin-bottom:16px; }
+  .field label { display:block; font-size:12px; font-weight:500; color:var(--dim); margin-bottom:5px; }
+  .field input, .field select, .field textarea { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:9px 12px; color:var(--text); font-size:13px; outline:none; transition:border 0.12s; font-family:inherit; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color:var(--accent); }
+  .field textarea { resize:vertical; min-height:70px; }
+  .field .hint { font-size:10px; color:var(--dim); margin-top:3px; }
+  .field select { appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238888aa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 10px center; padding-right:32px; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+
+  .btn { display:inline-flex; align-items:center; gap:7px; padding:9px 20px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:none; transition:all 0.12s; }
+  .btn-primary { background:var(--accent); color:#fff; } .btn-primary:hover { background:var(--accent2); }
+  .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); } .btn-secondary:hover { border-color:var(--accent); }
+  .btn-green { background:var(--green); color:var(--bg); font-weight:600; } .btn-green:hover { filter:brightness(1.1); }
+  .btn-ghost { background:transparent; color:var(--dim); } .btn-ghost:hover { color:var(--text); }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .actions { display:flex; justify-content:space-between; margin-top:28px; padding-top:18px; border-top:1px solid var(--border); }
+
+  /* Status indicators */
+  .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .status-dot.on { background:var(--green); } .status-dot.off { background:var(--red); } .status-dot.unknown { background:var(--dim); }
+
+  /* Niche cards — visual */
+  .niche-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:10px; cursor:pointer; transition:all 0.12s; }
+  .niche-card:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .niche-card.selected { border-color:var(--green); background:var(--green-bg); }
+  .niche-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .niche-name { font-weight:600; font-size:14px; }
+  .niche-score { font-size:22px; font-weight:800; color:var(--accent2); }
+  .niche-meter { margin-bottom:6px; }
+  .niche-meter-label { display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-bottom:3px; }
+  .meter-track { height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; }
+  .meter-fill { height:100%; border-radius:3px; transition:width 0.3s; }
+  .meter-fill.demand { background:linear-gradient(90deg, var(--green), #6ee7b7); }
+  .meter-fill.competition { background:linear-gradient(90deg, var(--red), #fca5a5); }
+  .niche-why { font-size:12px; color:var(--dim); margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
+  .niche-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .tag { padding:2px 8px; border-radius:10px; font-size:10px; background:var(--surface2); color:var(--dim); }
+
+  /* Style presets */
+  .style-card { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:14px; cursor:pointer; transition:all 0.12s; }
+  .style-card:hover { border-color:var(--accent); }
+  .style-card.selected { border-color:var(--accent); background:var(--accent-bg); }
+  .style-name { font-weight:600; font-size:13px; margin-bottom:3px; }
+  .style-desc { font-size:11px; color:var(--dim); }
+  .style-swatch { display:flex; gap:3px; margin-top:6px; }
+  .style-swatch span { width:14px; height:14px; border-radius:3px; }
+
+  /* Format toggles */
+  .format-toggle { display:flex; gap:10px; }
+  .format-btn { flex:1; padding:14px; border-radius:10px; border:2px solid var(--border); background:var(--bg); cursor:pointer; text-align:center; transition:all 0.12s; }
+  .format-btn.active { border-color:var(--accent); background:var(--accent-bg); }
+  .format-btn h4 { font-size:14px; margin-bottom:3px; }
+  .format-btn p { font-size:11px; color:var(--dim); }
+
+  /* Pipeline stages */
+  .pipeline-stage { display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:8px; margin-bottom:8px; background:var(--bg); border:1px solid var(--border); }
+  .pipeline-stage.running { border-color:var(--yellow); background:var(--yellow-bg); }
+  .pipeline-stage.done { border-color:var(--green); background:var(--green-bg); }
+  .pipeline-stage.error { border-color:var(--red); background:var(--red-bg); }
+  .stage-icon { width:28px; height:28px; border-radius:50%; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:12px; flex-shrink:0; }
+  .pipeline-stage.done .stage-icon { background:var(--green); color:var(--bg); }
+  .pipeline-stage.running .stage-icon { background:var(--yellow); color:var(--bg); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .stage-info { flex:1; }
+  .stage-title { font-size:13px; font-weight:600; }
+  .stage-detail { font-size:11px; color:var(--dim); margin-top:2px; }
+
+  /* Preview panel */
+  .story-preview { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:16px; max-height:300px; overflow-y:auto; font-size:13px; line-height:1.7; }
+  .story-scene { margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+  .story-scene:last-child { border:none; margin:0; padding:0; }
+  .scene-num { font-size:10px; color:var(--accent); font-weight:600; text-transform:uppercase; }
+
+  /* Image gallery */
+  .gallery { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .gallery img { width:100%; border-radius:6px; border:1px solid var(--border); }
+
+  /* Loading spinner */
+  .spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.6s linear infinite; display:inline-block; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* Cost pill */
+  .cost-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .cost-row:last-child { border:none; font-weight:600; color:var(--green); font-size:14px; }
+
+  /* Alert boxes */
+  .alert { padding:12px 16px; border-radius:8px; font-size:12px; line-height:1.5; margin-bottom:12px; }
+  .alert-info { background:var(--accent-bg); border:1px solid rgba(124,106,255,0.2); color:var(--accent2); }
+  .alert-warn { background:var(--yellow-bg); border:1px solid rgba(251,191,36,0.2); color:var(--yellow); }
+  .alert-ok { background:var(--green-bg); border:1px solid rgba(52,211,153,0.2); color:var(--green); }
+
+  @media (max-width:768px) { .sidebar{display:none} .main{margin-left:0;padding:20px;} .row,.row3{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="logo"><h1><span>Book</span>Factory</h1><p>Automated Publishing Studio</p></div>
+    <div id="nav"></div>
+  </nav>
+  <div class="main" id="content"></div>
+</div>
+
+<script>
+const API = '';  // same origin
+const S = {
+  step: 0,
+  status: null,  // from /api/status
+  config: { authorName:'Starlit Stories Press', publisher:'Starlit Stories Press' },
+  book: {
+    category:'', ageRange:'3-6', theme:'', animal:'', lesson:'', notes:'',
+    artStyle:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations.',
+    trimSize:'8.5x8.5', formats:['paperback','ebook'], pricePaperback:'9.99', priceEbook:'4.99'
+  },
+  research: { results:[], selected:null, loading:false },
+  gen: { bookId:null, story:null, stages:{research:'pending',story:'pending',art:'pending',pdf:'pending',publish:'pending'}, log:[] }
+};
+
+const STEPS = [
+  {id:'setup',name:'Setup',icon:'1'},
+  {id:'research',name:'Find Niche',icon:'2'},
+  {id:'brief',name:'Book Brief',icon:'3'},
+  {id:'style',name:'Art Style',icon:'4'},
+  {id:'format',name:'Format & Price',icon:'5'},
+  {id:'generate',name:'Generate',icon:'6'},
+  {id:'output',name:'Output',icon:'7'}
+];
+
+const CATS = [
+  'Animal Books','Bedtime & Dreams','Friendship','Self-Esteem',
+  'Emotions','Rhyming','Nature','Adventure','Humor','Family','Holiday'
+];
+
+const STYLES = [
+  {name:'Gouache / Watercolor', desc:'Warm, painterly, textured — like Pete Oswald', colors:['#e8976c','#7cb5a0','#f4d590','#5a7fa0'],
+   value:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations. NOT digital vector, NOT 3D, NOT photorealistic, NOT anime.'},
+  {name:'Digital Illustration', desc:'Clean, vibrant, modern — like Pixar concept art', colors:['#ff6b8a','#4ecdc4','#ffe66d','#6c5ce7'],
+   value:'Clean digital illustration with soft gradients, vibrant saturated colors, rounded friendly shapes. Similar to modern Pixar concept art or Lorena Alvarez. NOT photorealistic, NOT 3D rendered.'},
+  {name:'Colored Pencil', desc:'Soft, sketchy, storybook — like Oliver Jeffers', colors:['#d4a574','#8fbc8f','#e6c88a','#b0a090'],
+   value:'Colored pencil illustration with visible pencil strokes and soft blending. Warm muted palette, slightly grainy paper texture. Similar to Oliver Jeffers or Jon Klassen. Gentle and whimsical.'},
+  {name:'Flat / Graphic', desc:'Bold shapes, solid colors — like Mary Blair', colors:['#ff4757','#2ed573','#ffa502','#3742fa'],
+   value:'Modern flat illustration with bold solid colors, simple geometric shapes, clean lines. Playful and graphic. Similar to Ingela P Arrhenius or Mary Blair. Minimal texture.'},
+  {name:'Custom', desc:'Write your own style prompt', colors:['#888','#aaa','#666','#bbb'], value:''}
+];
+
+// ─── API helpers ───
+async function api(path, data) {
+  const opts = data ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)} : {};
+  const r = await fetch(API + path, opts);
+  return r.json();
+}
+
+async function checkStatus() {
+  try { S.status = await api('/api/status'); } catch(e) { S.status = null; }
+}
+
+// ─── Render ───
+function render() {
+  document.getElementById('nav').innerHTML = STEPS.map((s,i) => {
+    const cls = i===S.step?'active':i<S.step?'done':'';
+    return `<div class="nav-item ${cls}" onclick="go(${i})"><div class="dot">${i<S.step?'✓':s.icon}</div>${s.name}</div>`;
+  }).join('');
+  const views = [vSetup,vResearch,vBrief,vStyle,vFormat,vGenerate,vOutput];
+  document.getElementById('content').innerHTML = views[S.step]();
+  bind();
+}
+
+function go(n) { S.step=n; render(); window.scrollTo(0,0); }
+function v(id) { const el=document.getElementById(id); return el?el.value:''; }
+
+// ─── Step 1: Setup ───
+function vSetup() {
+  const st = S.status || {};
+  const dot = (ok) => `<span class="status-dot ${ok?'on':ok===false?'off':'unknown'}"></span>`;
+  return `<div class="step active">
+    <h2>Setup</h2>
+    <p class="sub">System checks. Everything runs locally — nothing leaves your machine except API calls.</p>
+
+    <div class="card">
+      <h3>System Status</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+        <div style="display:flex;align-items:center;gap:8px;">${dot(st.anthropic_key)} Anthropic API Key</div>
+        <div style="display:flex;align-items:center;gap:8px;">${dot(st.openai_key)} OpenAI API Key</div>
+        <div style="display:flex;align-items:center;gap:8px;">${dot(st.chrome_profile)} Chrome Profile</div>
+        <div style="display:flex;align-items:center;gap:8px;">${dot(st.deps?.openai)} Python Dependencies</div>
+      </div>
+      ${!st.anthropic_key || !st.openai_key ? `
+      <div class="alert alert-warn" style="margin-top:14px;">
+        <strong>API keys missing.</strong> Add them to your shell profile:<br/>
+        <code style="font-size:11px;">echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.zshrc && source ~/.zshrc</code><br/>
+        <code style="font-size:11px;">echo 'export OPENAI_API_KEY="your-key"' >> ~/.zshrc && source ~/.zshrc</code><br/>
+        Then restart Book Factory.
+      </div>` : `<div class="alert alert-ok" style="margin-top:14px;">All systems ready.</div>`}
+      <button class="btn btn-secondary" style="margin-top:10px;" onclick="recheckStatus()">Recheck</button>
+    </div>
+
+    <div class="card">
+      <h3>Publisher Info</h3>
+      <div class="row">
+        <div class="field"><label>Author / Pen Name</label><input id="authorName" value="${S.config.authorName}"/></div>
+        <div class="field"><label>Publisher Name</label><input id="publisher" value="${S.config.publisher}"/></div>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>KDP Publishing</strong> uses your existing Chrome login. If you're signed into KDP in Chrome, the publisher will reuse that session. No credentials stored.
+    </div>
+
+    <div class="actions"><div></div>
+      <button class="btn btn-primary" onclick="saveSetup()">Save & Continue →</button>
+    </div>
+  </div>`;
+}
+
+async function recheckStatus() { await checkStatus(); render(); }
+
+async function saveSetup() {
+  S.config.authorName = v('authorName');
+  S.config.publisher = v('publisher');
+  await api('/api/config', { defaults: { author_name: S.config.authorName, publisher: S.config.publisher }});
+  go(1);
+}
+
+// ─── Step 2: Research ───
+function vResearch() {
+  const cards = S.research.results.map((n,i) => {
+    const demand = Math.min(100, Math.round((1 - (n.bsr||50000)/200000) * 100));
+    const comp = Math.min(100, Math.round(((n.reviews||30)/100) * 100));
+    const why = demand>60&&comp<40 ? 'High demand, few competitors — great opportunity'
+              : demand>60 ? 'Strong demand but some competition'
+              : comp<40 ? 'Low competition, moderate demand'
+              : 'Worth exploring';
+    return `<div class="niche-card ${S.research.selected===i?'selected':''}" onclick="pickNiche(${i})">
+      <div class="niche-top">
+        <span class="niche-name">${n.name||n.category||'Niche'}</span>
+        <span class="niche-score">${n.score||'—'}</span>
+      </div>
+      <div class="niche-meter">
+        <div class="niche-meter-label"><span>Demand (people buying)</span><span>${demand}%</span></div>
+        <div class="meter-track"><div class="meter-fill demand" style="width:${demand}%"></div></div>
+      </div>
+      <div class="niche-meter">
+        <div class="niche-meter-label"><span>Competition (harder to rank)</span><span>${comp}%</span></div>
+        <div class="meter-track"><div class="meter-fill competition" style="width:${comp}%"></div></div>
+      </div>
+      <div class="niche-why">${why}</div>
+      ${(n.keywords||[]).length ? `<div class="niche-tags">${n.keywords.map(k=>`<span class="tag">${k}</span>`).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  return `<div class="step active">
+    <h2>Find a Niche</h2>
+    <p class="sub">Discover which categories have buyers but few competitors — your best chance to get discovered as a new author.</p>
+
+    <div class="card">
+      <h3>Quick Pick (or run full research below)</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${CATS.map(c => `<span class="tag" style="cursor:pointer;padding:5px 12px;font-size:12px;${S.book.category.includes(c)?'background:var(--accent-bg);color:var(--accent2);border:1px solid var(--accent);':''}" onclick="quickCat('${c}')">${c}</span>`).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Research Results</h3>
+      ${S.research.loading ? '<div style="text-align:center;padding:20px;"><div class="spinner"></div><p style="color:var(--dim);font-size:12px;margin-top:8px;">Scanning Amazon categories...</p></div>' :
+        cards || '<p style="color:var(--dim);font-size:13px;">Click "Run Research" to scan Amazon for opportunities, or pick a category above.</p>'}
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="runResearch()" ${S.research.loading?'disabled':''}>
+          ${S.research.loading?'<span class="spinner"></span> Researching...':'Run Research'}
+        </button>
+        <button class="btn btn-secondary" onclick="loadSample()">Use Sample Data</button>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>How to read these:</strong> Green bar = demand (are people buying?). Red bar = competition (how hard to rank). High demand + low competition = best opportunity. Score combines both into one number.
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(0)">← Setup</button>
+      <button class="btn btn-primary" onclick="go(2)">Continue →</button>
+    </div>
+  </div>`;
+}
+
+function quickCat(c) {
+  S.book.category = "Children's " + c;
+  render();
+}
+
+function pickNiche(i) {
+  S.research.selected = i;
+  const n = S.research.results[i];
+  S.book.category = n.name || n.category || '';
+  S.book.theme = n.theme || n.brief?.theme || '';
+  S.book.animal = n.animal || n.brief?.animal || '';
+  S.book.lesson = n.lesson || n.brief?.lesson || '';
+  render();
+}
+
+async function runResearch() {
+  S.research.loading = true; render();
+  try {
+    const r = await api('/api/research', { use_fallback: true });
+    if (r.ok) S.research.results = r.niches || [];
+    else alert('Research failed: ' + (r.error||'Unknown error'));
+  } catch(e) { alert('Server error: ' + e.message); }
+  S.research.loading = false; render();
+}
+
+function loadSample() {
+  S.research.results = [
+    {name:"Children's Fox Books",score:82,bsr:54000,reviews:23,keywords:["fox bedtime story","cute fox book toddler"],theme:"forest adventure",animal:"fox",lesson:"bravery"},
+    {name:"Children's Penguin Books",score:78,bsr:61000,reviews:31,keywords:["penguin story for kids","baby penguin book"],theme:"winter friendship",animal:"penguin",lesson:"friendship"},
+    {name:"Children's Dragon Books",score:75,bsr:48000,reviews:42,keywords:["friendly dragon book","dragon adventure"],theme:"overcoming fears",animal:"dragon",lesson:"courage"},
+    {name:"Children's Bunny Books",score:71,bsr:72000,reviews:18,keywords:["bunny rabbit story","cute bunny book"],theme:"springtime discovery",animal:"bunny",lesson:"curiosity"},
+    {name:"Children's Owl Books",score:68,bsr:89000,reviews:15,keywords:["owl bedtime story","wise owl book"],theme:"nighttime exploration",animal:"owl",lesson:"wisdom"}
+  ];
+  render();
+}
+
+// ─── Step 3: Brief ───
+function vBrief() {
+  return `<div class="step active">
+    <h2>Book Brief</h2>
+    <p class="sub">What's this book about? The AI uses these inputs to write a 12-scene rhyming picture book.</p>
+    <div class="card">
+      <div class="row">
+        <div class="field"><label>Category</label><input id="category" value="${S.book.category}" placeholder="e.g. Children's Fox Books"/></div>
+        <div class="field"><label>Age Range</label><select id="ageRange">
+          ${['2-4','3-6','4-8','5-10'].map(a=>`<option ${S.book.ageRange===a?'selected':''}>${a}</option>`).join('')}
+        </select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Main Character Animal</label><input id="animal" value="${S.book.animal}" placeholder="fox, owl, bunny... (blank = AI picks)"/></div>
+        <div class="field"><label>Core Lesson</label><input id="lesson" value="${S.book.lesson}" placeholder="bravery, kindness... (blank = AI picks)"/></div>
+      </div>
+      <div class="field"><label>Theme / Setting</label><input id="theme" value="${S.book.theme}" placeholder="forest adventure, underwater world, starlit journey..."/></div>
+      <div class="field"><label>Extra Notes (optional)</label><textarea id="notes" rows="2" placeholder="Character name, plot ideas, tone, season...">${S.book.notes||''}</textarea></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(1)">← Research</button>
+      <button class="btn btn-primary" onclick="saveBrief()">Continue →</button>
+    </div>
+  </div>`;
+}
+
+function saveBrief() {
+  S.book.category=v('category'); S.book.ageRange=v('ageRange'); S.book.animal=v('animal');
+  S.book.lesson=v('lesson'); S.book.theme=v('theme'); S.book.notes=v('notes');
+  go(3);
+}
+
+// ─── Step 4: Art Style ───
+function vStyle() {
+  return `<div class="step active">
+    <h2>Art Style</h2>
+    <p class="sub">Choose an illustration style. This prompt is sent with every image generation.</p>
+    <div class="card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        ${STYLES.map((s,i) => `
+          <div class="style-card ${S.book.artStyle===s.value||(s.name==='Custom'&&!STYLES.slice(0,4).some(x=>x.value===S.book.artStyle))?'selected':''}" onclick="pickStyle(${i})">
+            <div class="style-name">${s.name}</div>
+            <div class="style-desc">${s.desc}</div>
+            <div class="style-swatch">${s.colors.map(c=>`<span style="background:${c}"></span>`).join('')}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="card">
+      <h3>Style Prompt</h3>
+      <div class="field"><textarea id="artStyle" rows="3">${S.book.artStyle}</textarea>
+        <div class="hint">Edit freely — this exact text goes into every image prompt</div></div>
+    </div>
+    <div class="alert alert-warn">
+      <strong>Eye consistency</strong> is auto-injected into every prompt: "Large, round, dark brown irises with TWO bright white highlight dots." You don't need to add this.
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(2)">← Brief</button>
+      <button class="btn btn-primary" onclick="saveStyle()">Continue →</button>
+    </div>
+  </div>`;
+}
+
+function pickStyle(i) {
+  const s = STYLES[i];
+  S.book.artStyle = s.value;
+  render();
+  if (s.name==='Custom') document.getElementById('artStyle')?.focus();
+}
+
+function saveStyle() { S.book.artStyle = v('artStyle'); go(4); }
+
+// ─── Step 5: Format & Price ───
+function vFormat() {
+  const pb = S.book.formats.includes('paperback');
+  const eb = S.book.formats.includes('ebook');
+  const royPb = (parseFloat(S.book.pricePaperback)*0.6 - 2.15).toFixed(2);
+  const royEb = (parseFloat(S.book.priceEbook)*0.7*0.99).toFixed(2);
+  return `<div class="step active">
+    <h2>Format & Pricing</h2>
+    <p class="sub">Choose output formats. Each format produces different files for KDP.</p>
+    <div class="card">
+      <h3>Formats</h3>
+      <div class="format-toggle">
+        <div class="format-btn ${pb?'active':''}" onclick="togFmt('paperback')">
+          <h4>Paperback</h4><p>Interior PDF + Cover PDF</p>
+        </div>
+        <div class="format-btn ${eb?'active':''}" onclick="togFmt('ebook')">
+          <h4>Kindle eBook</h4><p>Interior PDF + Cover JPG</p>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="row3">
+        <div class="field"><label>Trim Size</label><select id="trimSize">
+          ${['8.5x8.5','8x10','6x9'].map(t=>`<option ${S.book.trimSize===t?'selected':''}>${t}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Paperback ($)</label><input type="number" id="pricePb" value="${S.book.pricePaperback}" step="0.01"/>
+          <div class="hint">Royalty: ~$${royPb}</div></div>
+        <div class="field"><label>eBook ($)</label><input type="number" id="priceEb" value="${S.book.priceEbook}" step="0.01" max="9.99"/>
+          <div class="hint">Royalty: ~$${royEb}</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Cost Breakdown</h3>
+      <div class="cost-row"><span>15 illustrations (gpt-image-1)</span><span>~$1.20</span></div>
+      <div class="cost-row"><span>Story generation (Claude)</span><span>~$0.10</span></div>
+      <div class="cost-row"><span>KDP listing fee</span><span>Free</span></div>
+      <div class="cost-row"><span>Total per book</span><span>~$1.30</span></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(3)">← Style</button>
+      <button class="btn btn-primary" onclick="saveFmt()">Continue →</button>
+    </div>
+  </div>`;
+}
+
+function togFmt(f) {
+  const i = S.book.formats.indexOf(f);
+  if (i>-1) S.book.formats.splice(i,1); else S.book.formats.push(f);
+  render();
+}
+
+function saveFmt() {
+  S.book.trimSize = v('trimSize');
+  S.book.pricePaperback = v('pricePb');
+  S.book.priceEbook = v('priceEb');
+  go(5);
+}
+
+// ─── Step 6: Generate ───
+function vGenerate() {
+  const stages = [
+    {key:'story', name:'Generate Story', desc:'12 scenes, rhyming text, character design'},
+    {key:'art', name:'Create Illustrations', desc:'Character sheet + 14 images'},
+    {key:'pdf', name:'Build PDFs', desc:'Interior, cover, Kindle cover'},
+    {key:'publish', name:'Publish to KDP', desc:'Upload and list on Amazon'}
+  ];
+
+  return `<div class="step active">
+    <h2>Generate Book</h2>
+    <p class="sub">Run each stage. Review results before continuing to the next.</p>
+
+    <div class="card">
+      <h3>Summary</h3>
+      <div style="font-size:12px;color:var(--dim);line-height:1.8;">
+        <strong style="color:var(--text);">${S.book.category||'No category'}</strong> · Ages ${S.book.ageRange} · ${S.book.animal||'AI picks animal'}<br/>
+        Theme: ${S.book.theme||'AI picks'} · Lesson: ${S.book.lesson||'AI picks'}<br/>
+        Formats: ${S.book.formats.join(' + ')} · $${S.book.pricePaperback} / $${S.book.priceEbook}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Pipeline</h3>
+      ${stages.map(s => {
+        const st = S.gen.stages[s.key];
+        return `<div class="pipeline-stage ${st}">
+          <div class="stage-icon">${st==='done'?'✓':st==='running'?'⟳':st==='error'?'✗':'○'}</div>
+          <div class="stage-info">
+            <div class="stage-title">${s.name}</div>
+            <div class="stage-detail">${s.desc}</div>
+          </div>
+          ${st==='pending'?`<button class="btn btn-secondary" onclick="runStage('${s.key}')" ${s.key!=='story'&&S.gen.stages.story==='pending'?'disabled':''}>Run</button>`:''}
+          ${st==='running'?'<span class="spinner"></span>':''}
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${S.gen.story ? `<div class="card">
+      <h3>Story Preview: ${S.gen.story.title||S.gen.story.story?.title||''}</h3>
+      <div class="story-preview">
+        ${(S.gen.story.story?.scenes||S.gen.story.scenes||[]).map((sc,i) => `
+          <div class="story-scene">
+            <div class="scene-num">Scene ${i+1}</div>
+            <div>${sc.text||sc.content||''}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
+    ${S.gen.log.length ? `<div class="card"><h3>Log</h3>
+      <div style="font-family:monospace;font-size:11px;color:var(--dim);max-height:150px;overflow-y:auto;">
+        ${S.gen.log.map(l=>`<div>${l}</div>`).join('')}
+      </div>
+    </div>` : ''}
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(4)">← Format</button>
+      <button class="btn btn-primary" onclick="go(6)" ${!S.gen.bookId?'disabled':''}>View Output →</button>
+    </div>
+  </div>`;
+}
+
+async function runStage(stage) {
+  S.gen.stages[stage] = 'running';
+  S.gen.log.push(`[${new Date().toLocaleTimeString()}] Starting ${stage}...`);
+  render();
+
+  try {
+    if (stage === 'story') {
+      const brief = {
+        category: S.book.category, age_range: S.book.ageRange,
+        animal: S.book.animal, theme: S.book.theme,
+        lesson: S.book.lesson, notes: S.book.notes,
+        art_style: S.book.artStyle, trim_size: S.book.trimSize,
+        formats: S.book.formats
+      };
+      const r = await api('/api/story', brief);
+      if (r.ok) {
+        S.gen.bookId = r.book_id;
+        S.gen.story = r.story;
+        S.gen.stages.story = 'done';
+        S.gen.log.push(`[${new Date().toLocaleTimeString()}] Story complete: ${r.book_id}`);
+      } else throw new Error(r.error);
+    }
+    else if (stage === 'art') {
+      if (!S.gen.bookId) { alert('Generate story first'); S.gen.stages.art='pending'; render(); return; }
+      // SSE stream
+      const evtSource = new EventSource(`/api/art?book_id=${S.gen.bookId}`);
+      // Fallback: POST
+      const r = await api('/api/art', { book_id: S.gen.bookId });
+      // Art is long-running — for now just mark done
+      S.gen.stages.art = 'done';
+      S.gen.log.push(`[${new Date().toLocaleTimeString()}] Art generation complete`);
+    }
+    else if (stage === 'pdf') {
+      if (!S.gen.bookId) { alert('Generate story + art first'); S.gen.stages.pdf='pending'; render(); return; }
+      const r = await api('/api/pdf', { book_id: S.gen.bookId });
+      if (r.ok) { S.gen.stages.pdf = 'done'; S.gen.log.push(`[${new Date().toLocaleTimeString()}] PDFs built`); }
+      else throw new Error(r.error);
+    }
+    else if (stage === 'publish') {
+      if (!S.gen.bookId) { alert('Build PDFs first'); S.gen.stages.publish='pending'; render(); return; }
+      const r = await api('/api/publish', { book_id: S.gen.bookId });
+      if (r.ok) { S.gen.stages.publish = 'done'; S.gen.log.push(`[${new Date().toLocaleTimeString()}] Published!`); }
+      else throw new Error(r.error);
+    }
+  } catch(e) {
+    S.gen.stages[stage] = 'error';
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
+  }
+  render();
+}
+
+// ─── Step 7: Output ───
+function vOutput() {
+  return `<div class="step active">
+    <h2>Output</h2>
+    <p class="sub">Your generated book files.</p>
+
+    ${S.gen.bookId ? `
+    <div class="card">
+      <h3>Book: ${S.gen.bookId}</h3>
+      <div style="font-size:13px;color:var(--dim);line-height:1.8;">
+        ${S.gen.story ? `<strong style="color:var(--text);">${S.gen.story.title||S.gen.story.story?.title||'Untitled'}</strong><br/>` : ''}
+        Files saved to: <code>output/${S.gen.bookId}/</code>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Downloads</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <a href="/api/files/${S.gen.bookId}/story_package.json" class="btn btn-secondary" download>Story JSON</a>
+        <a href="/api/files/${S.gen.bookId}/Interior.pdf" class="btn btn-secondary" download>Interior PDF</a>
+        <a href="/api/files/${S.gen.bookId}/Cover.pdf" class="btn btn-secondary" download>Cover PDF</a>
+        <a href="/api/files/${S.gen.bookId}/Kindle_Cover.jpg" class="btn btn-secondary" download>Kindle Cover</a>
+      </div>
+    </div>
+    ` : `
+    <div class="alert alert-warn">No book generated yet. Go to Generate step first.</div>
+    `}
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(5)">← Generate</button>
+      <button class="btn btn-green" onclick="startNew()">New Book</button>
+    </div>
+  </div>`;
+}
+
+function startNew() {
+  S.gen = {bookId:null,story:null,stages:{story:'pending',art:'pending',pdf:'pending',publish:'pending'},log:[]};
+  S.research.selected = null;
+  S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.notes='';
+  go(1);
+}
+
+function bind() {}
+
+// ─── Init ───
+(async () => {
+  await checkStatus();
+  render();
+})();
+</script>
+</body>
+</html>

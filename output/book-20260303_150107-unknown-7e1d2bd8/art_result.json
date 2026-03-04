@@ -1,0 +1,7 @@
+{
+  "book_id": "book-20260303_150107-unknown-7e1d2bd8",
+  "status": "pending_mac_execution",
+  "mac_script": "scripts/run_on_mac_book-20260303_150107-unknown-7e1d2bd8.py",
+  "instructions": "Run the Mac script to generate images with OpenAI API",
+  "timestamp": "2026-03-03T15:01:07.478047"
+}

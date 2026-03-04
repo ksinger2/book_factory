@@ -1,0 +1,32 @@
+{
+  "title": "Shelly's Ocean Journey",
+  "subtitle": "A Tale of Discovery and Wonder",
+  "niche": null,
+  "age_range": "4-8",
+  "character_names": [
+    "Shelly",
+    "Ocean",
+    "Reef Friends"
+  ],
+  "story_outline": [
+    "Introduction: Shelly is born on a warm beach",
+    "Rising action: Shelly's first glimpse of the ocean",
+    "Climax: Shelly braves the waves to begin her journey",
+    "Resolution: Shelly discovers her home in the reef"
+  ],
+  "pages": 24,
+  "story_text": {
+    "page_1": "Once upon a time, on a warm sandy beach...",
+    "page_2": "Shelly the sea turtle hatched from her egg..."
+  },
+  "character_descriptions": {
+    "Shelly": "A brave young sea turtle with a curious spirit. Soft shell, warm brown eyes with bright highlights.",
+    "Ocean": "Personified as a gentle, welcoming guide. Blue and green tones, flowing form."
+  },
+  "art_prompts": {
+    "page_1": "A baby sea turtle hatching from sand on a peaceful beach at sunrise",
+    "page_2": "Shelly the sea turtle looking out at the vast ocean, amazed and excited"
+  },
+  "keywords": [],
+  "timestamp": "2026-03-03T15:01:07.477196"
+}

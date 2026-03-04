@@ -1,0 +1,31 @@
+{
+  "created_at": "2026-03-03T15:01:07.476872",
+  "updated_at": "2026-03-03T15:01:07.478691",
+  "stages": {
+    "research": {
+      "complete": false,
+      "timestamp": null,
+      "error": null
+    },
+    "story": {
+      "complete": true,
+      "timestamp": "2026-03-03T15:01:07.477776",
+      "error": null
+    },
+    "art": {
+      "complete": true,
+      "timestamp": "2026-03-03T15:01:07.478113",
+      "error": null
+    },
+    "pdf": {
+      "complete": true,
+      "timestamp": "2026-03-03T15:01:07.478500",
+      "error": null
+    },
+    "publish": {
+      "complete": true,
+      "timestamp": "2026-03-03T15:01:07.478690",
+      "error": null
+    }
+  }
+}

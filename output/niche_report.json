@@ -1,0 +1,508 @@
+[
+  {
+    "rank": 1,
+    "niche_id": "dogs",
+    "category": "Dog Adventure",
+    "opportunity_score": 46.17,
+    "demand_score": 92.33,
+    "competition_score": 0,
+    "avg_bsr": 7667.0,
+    "avg_reviews": 393.0,
+    "sample_books": [
+      {
+        "title": "Buddy the Dog",
+        "reviews": 523,
+        "bsr": 2100
+      },
+      {
+        "title": "Puppy's Big Day",
+        "reviews": 389,
+        "bsr": 6700
+      },
+      {
+        "title": "The Brave Dog's Quest",
+        "reviews": 267,
+        "bsr": 14200
+      }
+    ],
+    "brief": {
+      "theme": "Dog Adventure",
+      "animal_character": "Dog",
+      "age_range": "3-7 years",
+      "lesson_moral": "Loyalty and friendship",
+      "suggested_title": "Buddy's Quest",
+      "target_categories": [
+        "Dog Adventure",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's dogs books",
+        "dog story for kids",
+        "dog adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 2,
+    "niche_id": "bedtime",
+    "category": "Bedtime & Dreams",
+    "opportunity_score": 46.02,
+    "demand_score": 92.03,
+    "competition_score": 0,
+    "avg_bsr": 7967.0,
+    "avg_reviews": 367.0,
+    "sample_books": [
+      {
+        "title": "Sleepy Time Stories",
+        "reviews": 389,
+        "bsr": 6800
+      },
+      {
+        "title": "Dream Land Tales",
+        "reviews": 267,
+        "bsr": 13200
+      },
+      {
+        "title": "The Sleepy Fox",
+        "reviews": 445,
+        "bsr": 3900
+      }
+    ],
+    "brief": {
+      "theme": "Bedtime & Dreams",
+      "animal_character": "Dream Character",
+      "age_range": "2-5 years",
+      "lesson_moral": "Finding peace and comfort",
+      "suggested_title": "Dream Time Magic",
+      "target_categories": [
+        "Bedtime & Dreams",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's bedtime books",
+        "dream character story for kids",
+        "bedtime story",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 3,
+    "niche_id": "rhyming",
+    "category": "Rhyming Books",
+    "opportunity_score": 46.02,
+    "demand_score": 92.03,
+    "competition_score": 0,
+    "avg_bsr": 7967.0,
+    "avg_reviews": 393.0,
+    "sample_books": [
+      {
+        "title": "Rhyme Time Fun",
+        "reviews": 389,
+        "bsr": 6200
+      },
+      {
+        "title": "The Rhyming Zoo",
+        "reviews": 512,
+        "bsr": 1800
+      },
+      {
+        "title": "Silly Rhymes",
+        "reviews": 278,
+        "bsr": 15900
+      }
+    ],
+    "brief": {
+      "theme": "Rhyming Books",
+      "animal_character": "Playful Character",
+      "age_range": "2-5 years",
+      "lesson_moral": "Love of language and rhythm",
+      "suggested_title": "Rhyme Time Adventures",
+      "target_categories": [
+        "Rhyming Books",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's rhyming books",
+        "playful character story for kids",
+        "playful character adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 4,
+    "niche_id": "emotions",
+    "category": "Emotions",
+    "opportunity_score": 45.88,
+    "demand_score": 91.77,
+    "competition_score": 0,
+    "avg_bsr": 8233.0,
+    "avg_reviews": 349.0,
+    "sample_books": [
+      {
+        "title": "Feelings Fun",
+        "reviews": 334,
+        "bsr": 8900
+      },
+      {
+        "title": "Understanding My Emotions",
+        "reviews": 267,
+        "bsr": 12700
+      },
+      {
+        "title": "The Happy-Sad Book",
+        "reviews": 445,
+        "bsr": 3100
+      }
+    ],
+    "brief": {
+      "theme": "Emotions",
+      "animal_character": "Emotional Character",
+      "age_range": "4-8 years",
+      "lesson_moral": "Understanding and expressing feelings",
+      "suggested_title": "Feeling All the Feelings",
+      "target_categories": [
+        "Emotions",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's emotions books",
+        "emotional character story for kids",
+        "emotional character adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 5,
+    "niche_id": "friendship",
+    "category": "Friendship",
+    "opportunity_score": 45.62,
+    "demand_score": 91.23,
+    "competition_score": 0,
+    "avg_bsr": 8767.0,
+    "avg_reviews": 371.0,
+    "sample_books": [
+      {
+        "title": "Friends Forever",
+        "reviews": 512,
+        "bsr": 2400
+      },
+      {
+        "title": "Making New Friends",
+        "reviews": 334,
+        "bsr": 9100
+      },
+      {
+        "title": "Best Friends Adventure",
+        "reviews": 267,
+        "bsr": 14800
+      }
+    ],
+    "brief": {
+      "theme": "Friendship",
+      "animal_character": "Friend Character",
+      "age_range": "3-7 years",
+      "lesson_moral": "The importance of having friends",
+      "suggested_title": "Best Friends Forever",
+      "target_categories": [
+        "Friendship",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's friendship books",
+        "friend character story for kids",
+        "friend character adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 6,
+    "niche_id": "dinosaurs",
+    "category": "Dinosaur Adventure",
+    "opportunity_score": 44.15,
+    "demand_score": 88.3,
+    "competition_score": 0,
+    "avg_bsr": 11700.0,
+    "avg_reviews": 318.0,
+    "sample_books": [
+      {
+        "title": "Dino Adventures",
+        "reviews": 298,
+        "bsr": 10200
+      },
+      {
+        "title": "The Lost Dinosaur",
+        "reviews": 412,
+        "bsr": 5100
+      },
+      {
+        "title": "Dinosaurs in the City",
+        "reviews": 245,
+        "bsr": 19800
+      }
+    ],
+    "brief": {
+      "theme": "Dinosaur Adventure",
+      "animal_character": "Dinosaur",
+      "age_range": "3-7 years",
+      "lesson_moral": "Embracing what makes you different",
+      "suggested_title": "Dino's Roaring Adventure",
+      "target_categories": [
+        "Dinosaur Adventure",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's dinosaurs books",
+        "dinosaur story for kids",
+        "dinosaur adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 7,
+    "niche_id": "cats",
+    "category": "Cat Adventure",
+    "opportunity_score": 43.57,
+    "demand_score": 87.13,
+    "competition_score": 0,
+    "avg_bsr": 12867.0,
+    "avg_reviews": 330.0,
+    "sample_books": [
+      {
+        "title": "Whiskers and Friends",
+        "reviews": 334,
+        "bsr": 9800
+      },
+      {
+        "title": "The Curious Kitten",
+        "reviews": 456,
+        "bsr": 3200
+      },
+      {
+        "title": "Cats Under the Moon",
+        "reviews": 201,
+        "bsr": 25600
+      }
+    ],
+    "brief": {
+      "theme": "Cat Adventure",
+      "animal_character": "Cat",
+      "age_range": "3-7 years",
+      "lesson_moral": "Independence and curiosity",
+      "suggested_title": "Whiskers' Discovery",
+      "target_categories": [
+        "Cat Adventure",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's cats books",
+        "cat story for kids",
+        "cat adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 8,
+    "niche_id": "self_esteem",
+    "category": "Self-Esteem",
+    "opportunity_score": 43.47,
+    "demand_score": 86.93,
+    "competition_score": 0,
+    "avg_bsr": 13067.0,
+    "avg_reviews": 293.0,
+    "sample_books": [
+      {
+        "title": "I Am Awesome",
+        "reviews": 278,
+        "bsr": 11600
+      },
+      {
+        "title": "Believing in Yourself",
+        "reviews": 412,
+        "bsr": 4200
+      },
+      {
+        "title": "You Are Special",
+        "reviews": 189,
+        "bsr": 23400
+      }
+    ],
+    "brief": {
+      "theme": "Self-Esteem",
+      "animal_character": "Confident Character",
+      "age_range": "4-8 years",
+      "lesson_moral": "Believing in yourself",
+      "suggested_title": "I Am Awesome",
+      "target_categories": [
+        "Self-Esteem",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's self esteem books",
+        "confident character story for kids",
+        "confident character adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 9,
+    "niche_id": "foxes",
+    "category": "Fox Adventure",
+    "opportunity_score": 42.38,
+    "demand_score": 84.75,
+    "competition_score": 0,
+    "avg_bsr": 15250.0,
+    "avg_reviews": 252.0,
+    "sample_books": [
+      {
+        "title": "Friendly Fox's Adventure",
+        "reviews": 245,
+        "bsr": 15200
+      },
+      {
+        "title": "The Fox and the Forest",
+        "reviews": 312,
+        "bsr": 8450
+      },
+      {
+        "title": "Clever Fox Finds Friends",
+        "reviews": 198,
+        "bsr": 22100
+      }
+    ],
+    "brief": {
+      "theme": "Fox Adventure",
+      "animal_character": "Fox",
+      "age_range": "3-7 years",
+      "lesson_moral": "Cleverness and problem-solving",
+      "suggested_title": "The Clever Fox's Journey",
+      "target_categories": [
+        "Fox Adventure",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's foxes books",
+        "fox story for kids",
+        "fox adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 10,
+    "niche_id": "bears",
+    "category": "Bear Adventure",
+    "opportunity_score": 42.27,
+    "demand_score": 84.53,
+    "competition_score": 0,
+    "avg_bsr": 15467.0,
+    "avg_reviews": 285.0,
+    "sample_books": [
+      {
+        "title": "Bruno the Bear",
+        "reviews": 412,
+        "bsr": 5200
+      },
+      {
+        "title": "Bears in the Woods",
+        "reviews": 287,
+        "bsr": 12300
+      },
+      {
+        "title": "The Grumpy Bear's Lesson",
+        "reviews": 156,
+        "bsr": 28900
+      }
+    ],
+    "brief": {
+      "theme": "Bear Adventure",
+      "animal_character": "Bear",
+      "age_range": "3-7 years",
+      "lesson_moral": "Courage and strength",
+      "suggested_title": "Bruno's Big Adventure",
+      "target_categories": [
+        "Bear Adventure",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's bears books",
+        "bear story for kids",
+        "bear adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  },
+  {
+    "rank": 11,
+    "niche_id": "rabbits",
+    "category": "Rabbit Adventure",
+    "opportunity_score": 39.78,
+    "demand_score": 79.57,
+    "competition_score": 0,
+    "avg_bsr": 20433.0,
+    "avg_reviews": 197.0,
+    "sample_books": [
+      {
+        "title": "Hopping Through Meadows",
+        "reviews": 189,
+        "bsr": 18700
+      },
+      {
+        "title": "The Rabbit's Big Adventure",
+        "reviews": 267,
+        "bsr": 11200
+      },
+      {
+        "title": "Peter Finds His Way",
+        "reviews": 134,
+        "bsr": 31400
+      }
+    ],
+    "brief": {
+      "theme": "Rabbit Adventure",
+      "animal_character": "Rabbit",
+      "age_range": "3-7 years",
+      "lesson_moral": "Speed and agility in facing challenges",
+      "suggested_title": "Hopping to Success",
+      "target_categories": [
+        "Rabbit Adventure",
+        "Children's Picture Books",
+        "Early Readers"
+      ],
+      "target_keywords": [
+        "children's rabbits books",
+        "rabbit story for kids",
+        "rabbit adventure",
+        "kids' picture book",
+        "early readers"
+      ]
+    }
+  }
+]
