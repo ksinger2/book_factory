@@ -17,6 +17,7 @@ import sys
 import time
 import base64
 import logging
+import requests
 from pathlib import Path
 from typing import Optional, Tuple, List, Dict
 import json
@@ -44,13 +45,19 @@ class ArtPipeline:
     illustrations with vision-based quality assurance.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4-turbo"):
+    # Default style only used when no style is provided
+    DEFAULT_STYLE = "Soft watercolor children's book illustration with gentle colors and warm, friendly aesthetic. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image."
+
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None):
         """
         Initialize the ArtPipeline.
 
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY environment variable.
-            model: Vision model to use for QA checks. Defaults to gpt-4-turbo.
+            model: Vision model to use for QA checks. Defaults to gpt-4o.
+            style: Art style to use for all generations. If None, must be provided per-method call.
+            eye_style: Specific eye style instructions for character consistency.
+            reference_image: Base64 data URL of a reference image for character design.
 
         Raises:
             ValueError: If no API key is provided and OPENAI_API_KEY env var is not set.
@@ -65,13 +72,249 @@ class ArtPipeline:
 
         self.client = OpenAI(api_key=api_key)
         self.vision_model = model
-        self.image_model = "gpt-4o"  # Image generation model
+        self.image_model = "gpt-image-1"  # OpenAI's newest image generation model
+        self.style = style  # Store style at instance level
+        self.eye_style = eye_style  # Store eye style for consistency
+        self.reference_image = reference_image  # Store reference image for character design
+        self.character_visual_guide = None  # Detailed description extracted from character sheet
+        self.character_sheet_path = None  # Path to generated character sheet for scene references
 
         # QA thresholds
         self.max_retries = 3
         self.initial_backoff = 30  # seconds
 
-        logger.info(f"ArtPipeline initialized with model: {model}")
+        # Analyze reference image if provided
+        self.reference_features = None
+        if reference_image:
+            logger.info("Analyzing reference image for character features...")
+            self.reference_features = self._analyze_reference_image(reference_image)
+            if self.reference_features:
+                logger.info(f"Extracted features: {self.reference_features[:200]}...")
+
+        logger.info(f"ArtPipeline initialized with image model: {self.image_model}")
+        if style:
+            logger.info(f"Using art style: {style[:100]}...")
+        if eye_style:
+            logger.info(f"Using eye style: {eye_style[:100]}...")
+
+    def _analyze_reference_image(self, reference_image: str) -> Optional[str]:
+        """
+        Analyze a reference image using GPT-4 Vision to extract facial features.
+
+        Args:
+            reference_image: Base64 data URL of the reference image
+
+        Returns:
+            String description of extracted features, or None if analysis fails
+        """
+        try:
+            # Extract base64 data from data URL
+            if reference_image.startswith('data:'):
+                # Format: data:image/png;base64,<data>
+                base64_data = reference_image.split(',', 1)[1]
+                media_type = reference_image.split(';')[0].split(':')[1]
+            else:
+                base64_data = reference_image
+                media_type = "image/png"
+
+            analysis_prompt = """Analyze this person's facial features for use in children's book character design.
+Provide a detailed but concise description covering:
+
+*** MOST IMPORTANT - STATE FIRST ***
+1. SKIN TONE & ETHNICITY: Be VERY specific (e.g., "dark brown skin / Black/African features", "light brown skin / South Asian features", "fair/pale skin / Caucasian features", "tan/golden skin / Latino features", "warm brown skin / Middle Eastern features"). This MUST be stated clearly!
+
+2. FACE SHAPE: (oval, round, square, heart, oblong, diamond, etc.)
+3. EYE SHAPE: (almond, round, hooded, monolid, upturned, downturned, etc.)
+4. EYE COLOR: (specific color)
+5. EYE SIZE: (large, medium, small relative to face)
+6. NOSE SHAPE: (button, straight, curved, wide, narrow, upturned, etc.)
+7. NOSE SIZE: (small, medium, prominent)
+8. LIP SHAPE: (full, thin, heart-shaped, wide, etc.)
+9. HAIR COLOR: (specific color/tones)
+10. HAIR TEXTURE: (straight, wavy, curly, coily, kinky, etc.)
+11. HAIR STYLE: (length and how it's worn)
+12. DISTINCTIVE FEATURES: (dimples, freckles, birthmarks, etc.)
+
+Format as a single paragraph description suitable for an artist. START WITH SKIN TONE/ETHNICITY as the first thing mentioned! Example: "Character based on reference: Dark brown skin with African features, round face shape..." """
+
+            for attempt in range(3):
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gpt-4o",
+                        max_tokens=500,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:{media_type};base64,{base64_data}"
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": analysis_prompt
+                                    }
+                                ]
+                            }
+                        ]
+                    )
+
+                    features = response.choices[0].message.content
+                    logger.info("Reference image analysis complete")
+                    return features
+
+                except RateLimitError:
+                    if attempt < 2:
+                        wait_time = 30 * (attempt + 1)
+                        logger.warning(f"Rate limited analyzing reference. Waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error("Rate limit exceeded for reference image analysis")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error analyzing reference image: {e}")
+            return None
+
+    def _analyze_character_sheet(self, char_sheet_path: Path) -> Optional[str]:
+        """
+        Analyze a generated character sheet to extract detailed visual description.
+        This description is then used in all scene illustrations for consistency.
+
+        Args:
+            char_sheet_path: Path to the character sheet image
+
+        Returns:
+            Detailed character description string, or None if analysis fails
+        """
+        try:
+            with open(char_sheet_path, 'rb') as f:
+                image_data = base64.b64encode(f.read()).decode('utf-8')
+
+            analysis_prompt = """Analyze this character sheet and create a CHARACTER DNA description that will be copy-pasted into every subsequent image prompt to ensure PERFECT consistency.
+
+Extract and describe EVERY detail with EXACT specifications. Use descriptive, specific terms (not vague ones).
+
+OUTPUT FORMAT - Use this exact structure:
+
+CHARACTER DNA:
+
+SKIN: [Use descriptive terms like "warm caramel-brown" or "peachy cream" or "deep mahogany" - NOT just "brown" or "light"]
+
+FACE SHAPE: [round/oval/square/heart-shaped with specific details about proportions]
+
+EYES:
+- Shape: [almond/round/wide-set/hooded - be specific]
+- Size: [large/medium relative to face]
+- Color: [specific shade like "warm chocolate brown" or "bright emerald green"]
+- Style: [cartoon dot eyes/detailed with whites and iris/anime style - CRITICAL for consistency]
+
+NOSE: [button/straight/upturned - specific shape AND size]
+
+HAIR:
+- Color: [specific like "jet black" or "warm copper-orange" - NOT just "brown"]
+- Texture: [straight/wavy/curly/coily]
+- Style: [how it's worn - pigtails/loose/braided/short spiky]
+- Length: [shoulder-length/short/long]
+
+BODY: [age-appropriate build and proportions]
+
+CLOTHING:
+- Top: [exact item with specific color]
+- Bottom: [exact item with specific color]
+- Footwear: [exact item with specific color]
+- Accessories: [any items that should always be present]
+
+DISTINGUISHING FEATURES: [freckles/dimples/birthmarks/signature items]
+
+ART STYLE: [watercolor/digital/flat vector - describe the illustration style]
+
+Keep descriptions concise but EXACT. Every detail you specify will be used to maintain consistency across all book illustrations."""
+
+            for attempt in range(3):
+                try:
+                    response = self.client.chat.completions.create(
+                        model="gpt-4o",
+                        max_tokens=800,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{image_data}"
+                                        }
+                                    },
+                                    {
+                                        "type": "text",
+                                        "text": analysis_prompt
+                                    }
+                                ]
+                            }
+                        ]
+                    )
+
+                    description = response.choices[0].message.content
+                    logger.info(f"Character sheet analysis complete: {description[:200]}...")
+                    return description
+
+                except RateLimitError:
+                    if attempt < 2:
+                        wait_time = 30 * (attempt + 1)
+                        logger.warning(f"Rate limited analyzing character sheet. Waiting {wait_time}s...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error("Rate limit exceeded for character sheet analysis")
+                        return None
+
+        except Exception as e:
+            logger.error(f"Error analyzing character sheet: {e}")
+            return None
+
+    def _download_image(self, url: str, output_path: Path) -> None:
+        """Download image from URL and save to file."""
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
+        with open(output_path, 'wb') as f:
+            f.write(response.content)
+        logger.info(f"Image downloaded to {output_path}")
+
+    def _image_to_base64_url(self, image_path: Path) -> str:
+        """Convert image file to base64 data URL for API input."""
+        with open(image_path, 'rb') as f:
+            image_data = base64.b64encode(f.read()).decode('utf-8')
+        return f"data:image/png;base64,{image_data}"
+
+    def _prepare_reference_image_for_edit(self, image_source: str) -> Path:
+        """
+        Prepare reference image for images.edit API by saving to temp file.
+
+        Args:
+            image_source: Either a base64 data URL or file path
+
+        Returns:
+            Path to temporary image file
+        """
+        import tempfile
+
+        if image_source.startswith('data:'):
+            # Extract base64 data from data URL and save to temp file
+            base64_data = image_source.split(',', 1)[1]
+            image_bytes = base64.b64decode(base64_data)
+
+            # Save to temp file
+            temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            temp_file.write(image_bytes)
+            temp_file.close()
+            return Path(temp_file.name)
+        elif Path(image_source).exists():
+            return Path(image_source)
+        else:
+            raise ValueError(f"Invalid image source: {image_source}")
 
     def _save_image(self, image_data: str, output_path: Path) -> None:
         """
@@ -98,27 +341,33 @@ class ArtPipeline:
         logger.warning(f"Rate limited. Waiting {wait_time} seconds before retry...")
         time.sleep(wait_time)
 
-    def _add_eye_safety_instructions(self, prompt: str) -> str:
+    def _add_eye_safety_instructions(self, prompt: str, eye_style: str = None) -> str:
         """
         Add critical eye consistency instructions to prompt.
 
         Args:
             prompt: Original prompt text
+            eye_style: Specific eye style description. If None, uses generic consistency instruction.
 
         Returns:
             Prompt with eye safety instructions prepended
         """
-        eye_instructions = (
-            "CRITICAL — CHARACTER EYES: Large, round, dark brown irises. "
-            "Each eye MUST have TWO small bright white highlight dots. "
-            "Do NOT make eyes solid black.\n\n"
-        )
+        if eye_style:
+            eye_instructions = f"CRITICAL — CHARACTER EYES: {eye_style}\n\n"
+        else:
+            # Generic instruction to match character sheet
+            eye_instructions = (
+                "CRITICAL — CHARACTER EYES: Must match EXACTLY the same eye style "
+                "as shown in the character reference sheet. Same shape, same color, "
+                "same level of detail. Do NOT change the eye design.\n\n"
+            )
         return eye_instructions + prompt
 
     def generate_character_sheet(
         self,
         character_desc: str,
-        output_path: Optional[Path] = None
+        output_path: Optional[Path] = None,
+        style: Optional[str] = None
     ) -> Tuple[str, Path]:
         """
         Generate a character reference sheet with multiple poses and expressions.
@@ -129,6 +378,7 @@ class ArtPipeline:
         Args:
             character_desc: Description of the character to generate
             output_path: Where to save the character sheet. If None, uses default location.
+            style: Art style for the illustration. If None, uses instance style or default.
 
         Returns:
             Tuple of (image_data as base64, saved_path)
@@ -139,37 +389,110 @@ class ArtPipeline:
         if output_path is None:
             output_path = Path.home() / "books_output" / "character_sheets" / "character.png"
 
-        prompt = (
-            f"{character_desc}\n\n"
-            "Create a character reference sheet showing:\n"
-            "1. Full body frontal view (neutral expression)\n"
-            "2. Side profile view\n"
-            "3. Close-up face showing happy expression\n"
-            "4. Close-up face showing sad expression\n"
-            "5. Back view\n\n"
-            "Ensure consistent proportions and style across all poses. "
-            "Include clothing and distinctive features consistently. "
-            "Use a clean white background with subtle shadows."
-        )
+        # Use provided style, fall back to instance style, then default
+        art_style = style or self.style or self.DEFAULT_STYLE
+
+        # Build character DNA - the detailed description that stays identical across all prompts
+        # Reference features from analyzed image take priority
+        character_dna = ""
+        if self.reference_features:
+            character_dna = (
+                f"CHARACTER DNA (preserve exactly in all poses):\n"
+                f"{self.reference_features}\n"
+            )
+
+        # Add the character description
+        character_dna += f"\n{character_desc}\n"
+
+        # DEBUG: Log what's being used
+        logger.info(f"Character sheet generation - Reference features present: {bool(self.reference_features)}")
+        if self.reference_features:
+            logger.info(f"Reference features: {self.reference_features[:300]}...")
+
+        # Build prompt following optimal order: Style → Character → Layout → Constraints
+        prompt = f"""Children's book illustration character reference sheet.
+
+ART STYLE: {art_style}
+
+{character_dna}
+
+LAYOUT: Create a 4-panel character reference sheet on a clean white background:
+- Top left: Full body frontal view with neutral expression
+- Top right: Side profile view showing face and hair details
+- Bottom left: 3/4 view with happy smiling expression
+- Bottom right: Back view showing hair and clothing from behind
+
+CRITICAL CONSISTENCY REQUIREMENTS:
+- All 4 panels must show the EXACT SAME character
+- Face shape must be IDENTICAL in all views (same roundness/angles)
+- Eye shape, size, and color must be IDENTICAL
+- Nose shape and size must be IDENTICAL
+- Skin tone must be IDENTICAL (same exact shade)
+- Hair color, length, style, and texture must be IDENTICAL
+- Clothing colors and details must be IDENTICAL
+- Body proportions must be consistent across all views
+
+CONSTRAINTS:
+- Uniform panel sizes with clear separation
+- Simple solid white or light gray background
+- NO text, labels, words, or writing of any kind
+- Character is the only subject - no other characters or distracting elements
+- Consistent lighting direction across all panels"""
 
         logger.info(f"Generating character sheet: {character_desc[:50]}...")
 
         attempt = 0
         while attempt <= self.max_retries:
             try:
-                response = self.client.images.generate(
-                    model=self.image_model,
-                    prompt=prompt,
-                    size="1536x1024",
-                    quality="hd",
-                    n=1,
-                    response_format="b64_json"
-                )
+                # Generate character sheet - use images.edit if reference image provided
+                if self.reference_image:
+                    logger.info("Using images.edit with reference image for character sheet")
+                    ref_path = self._prepare_reference_image_for_edit(self.reference_image)
+                    # Prepend reference image instruction following best practices
+                    ref_prompt = f"""REFERENCE IMAGE: The person in the attached image is the basis for this character.
+Preserve their EXACT features in the illustrated character:
+- EXACT face shape (same proportions and angles)
+- EXACT eye shape, size, and color
+- EXACT nose shape and size
+- EXACT skin tone (same shade, do not lighten or darken)
+- EXACT hair color, texture, and style
 
-                image_data = response.data[0].b64_json
-                self._save_image(image_data, output_path)
+{prompt}"""
+                    with open(ref_path, 'rb') as ref_file:
+                        response = self.client.images.edit(
+                            model=self.image_model,
+                            image=[ref_file],  # Pass as list of file objects
+                            prompt=ref_prompt,
+                            size="1536x1024"  # Landscape for character sheet
+                        )
+                else:
+                    # No reference image - use generate
+                    logger.info("Using images.generate (no reference image)")
+                    response = self.client.images.generate(
+                        model=self.image_model,
+                        prompt=prompt,
+                        size="1536x1024",  # Landscape for character sheet
+                        n=1,
+                        quality="high"
+                    )
+
+                # gpt-image-1 returns base64 data
+                if response.data[0].b64_json:
+                    self._save_image(response.data[0].b64_json, output_path)
+                elif response.data[0].url:
+                    self._download_image(response.data[0].url, output_path)
                 logger.info("Character sheet generated successfully")
-                return image_data, output_path
+
+                # Store character sheet path for scene generation
+                self.character_sheet_path = output_path
+
+                # Analyze the character sheet to extract detailed visual guide
+                logger.info("Analyzing character sheet for visual consistency...")
+                self.character_visual_guide = self._analyze_character_sheet(output_path)
+                if self.character_visual_guide:
+                    logger.info("Character visual guide extracted successfully")
+
+                return None, output_path
 
             except RateLimitError:
                 if attempt < self.max_retries:
@@ -192,7 +515,8 @@ class ArtPipeline:
         scene_description: str,
         char_sheet_path: Path,
         illustration_type: str = "spread",
-        output_path: Optional[Path] = None
+        output_path: Optional[Path] = None,
+        style: Optional[str] = None
     ) -> Tuple[str, Path]:
         """
         Generate a single illustration with character consistency.
@@ -205,6 +529,7 @@ class ArtPipeline:
             char_sheet_path: Path to character sheet for reference
             illustration_type: "spread", "cover", or "back_cover"
             output_path: Where to save the illustration
+            style: Art style for the illustration. If None, uses instance style or default.
 
         Returns:
             Tuple of (image_data as base64, saved_path)
@@ -219,7 +544,7 @@ class ArtPipeline:
         if output_path is None:
             output_path = Path.home() / "books_output" / "spreads" / f"spread_{int(time.time())}.png"
 
-        # Determine size based on type
+        # Determine size based on type (gpt-image-1 supports various sizes)
         if illustration_type == "cover":
             size = "1024x1536"  # Portrait for cover
         elif illustration_type == "back_cover":
@@ -227,43 +552,95 @@ class ArtPipeline:
         else:
             size = "1536x1024"  # Landscape for spreads
 
-        # Build prompt with eye safety instructions
-        if illustration_type == "back_cover":
-            base_prompt = (
-                f"{scene_description}\n\n"
-                "This is the back cover. Show a beautiful landscape or scene setting "
-                "WITHOUT any characters. Focus on the environment, mood, and design elements."
-            )
-        else:
-            base_prompt = (
-                f"{scene_description}\n\n"
-                "Integrate the character from the reference sheet into this scene. "
-                "Maintain consistent character design, proportions, and style. "
-                "Ensure the character's pose and expression match the emotional tone of the scene."
-            )
+        # Use provided style, fall back to instance style, then default
+        art_style = style or self.style or self.DEFAULT_STYLE
 
-        prompt = self._add_eye_safety_instructions(base_prompt)
+        # Build character DNA from visual guide (copy-paste identical in every prompt)
+        character_dna = ""
+        if self.character_visual_guide:
+            logger.info(f"Using character visual guide for {illustration_type}: {self.character_visual_guide[:200]}...")
+            character_dna = f"CHARACTER DNA (must preserve exactly):\n{self.character_visual_guide}\n"
+        elif self.reference_features:
+            character_dna = f"CHARACTER DNA (must preserve exactly):\n{self.reference_features}\n"
+        else:
+            logger.warning(f"NO character visual guide available for {illustration_type}!")
+
+        # Build prompt following optimal order: Style → Scene → Character → Action → Constraints
+        if illustration_type == "back_cover":
+            prompt = f"""Children's book illustration - back cover design.
+
+ART STYLE: {art_style}
+
+SCENE: {scene_description}
+
+This is the back cover. Show a beautiful landscape or scene setting that complements the story.
+Focus on the environment, mood, and atmospheric design elements.
+
+CONSTRAINTS:
+- NO text, words, letters, numbers, titles, captions, or writing of any kind
+- NO characters unless specifically requested in the scene description
+- Maintain the same art style as the rest of the book
+- Create a cohesive, peaceful background suitable for back cover text overlay"""
+
+        else:
+            prompt = f"""Children's book illustration for interior page.
+
+ART STYLE: {art_style}
+
+SCENE/BACKGROUND: {scene_description}
+
+{character_dna}
+
+CRITICAL CONSISTENCY REQUIREMENTS - Character must match reference exactly:
+- Face shape: Preserve EXACT same shape (same roundness, same proportions)
+- Eyes: IDENTICAL shape, size, color, and style as reference
+- Nose: IDENTICAL shape and size as reference
+- Skin tone: EXACT same shade as reference (do not lighten or darken)
+- Hair: IDENTICAL color, length, style, and texture as reference
+- Clothing: Same outfit with same colors as reference
+- Body proportions: Consistent with reference
+
+CONSTRAINTS:
+- Change ONLY the pose, expression, and scene - NOT the character's features
+- NO text, words, letters, numbers, or writing of any kind in the image
+- Character should be the clear focal point
+- Maintain consistent art style throughout"""
 
         logger.info(f"Generating {illustration_type}: {scene_description[:50]}...")
 
         attempt = 0
         while attempt <= self.max_retries:
             try:
-                with open(char_sheet_path, 'rb') as f:
+                # Use images.edit with character sheet as reference for consistency
+                logger.info(f"Using images.edit with character sheet for {illustration_type}")
+                # Prepend character reference instruction
+                ref_prompt = f"""CHARACTER REFERENCE: The attached image shows the character that must appear in this scene.
+
+CRITICAL - Preserve these features EXACTLY from the reference:
+- Face shape: Same exact proportions
+- Eyes: Identical shape, size, and color
+- Nose: Same shape and size
+- Skin tone: Exact same shade
+- Hair: Same color, style, length, and texture
+- Clothing: Same outfit and colors
+- Body proportions: Consistent with reference
+
+{prompt}"""
+                with open(char_sheet_path, 'rb') as char_file:
                     response = self.client.images.edit(
                         model=self.image_model,
-                        image=f,
-                        prompt=prompt,
-                        size=size,
-                        quality="hd",
-                        n=1,
-                        response_format="b64_json"
+                        image=[char_file],  # Pass as list of file objects
+                        prompt=ref_prompt,
+                        size=size
                     )
 
-                image_data = response.data[0].b64_json
-                self._save_image(image_data, output_path)
+                # gpt-image-1 returns base64 data
+                if response.data[0].b64_json:
+                    self._save_image(response.data[0].b64_json, output_path)
+                elif response.data[0].url:
+                    self._download_image(response.data[0].url, output_path)
                 logger.info(f"{illustration_type.capitalize()} generated successfully")
-                return image_data, output_path
+                return None, output_path
 
             except RateLimitError:
                 if attempt < self.max_retries:
@@ -327,7 +704,8 @@ class ArtPipeline:
         )
 
         try:
-            response = self.client.messages.create(
+            # Use OpenAI's vision API format (gpt-4-turbo or gpt-4o)
+            response = self.client.chat.completions.create(
                 model=self.vision_model,
                 max_tokens=500,
                 messages=[
@@ -335,11 +713,9 @@ class ArtPipeline:
                         "role": "user",
                         "content": [
                             {
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": "image/png",
-                                    "data": image_data
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image_data}"
                                 }
                             },
                             {
@@ -351,7 +727,7 @@ class ArtPipeline:
                 ]
             )
 
-            qa_result = response.content[0].text
+            qa_result = response.choices[0].message.content
             logger.info(f"QA Check Result:\n{qa_result}")
 
             # Check if overall result is PASS or FAIL
@@ -369,7 +745,8 @@ class ArtPipeline:
         char_sheet_path: Path,
         scene_description: str,
         illustration_type: str = "spread",
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        style: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
         Regenerate a single image that failed QA.
@@ -380,6 +757,7 @@ class ArtPipeline:
             scene_description: Scene description for regeneration
             illustration_type: Type of illustration
             output_dir: Directory to save output
+            style: Art style for the illustration. If None, uses instance style or default.
 
         Returns:
             Tuple of (success boolean, path_or_error_message)
@@ -396,7 +774,8 @@ class ArtPipeline:
                 scene_description,
                 char_sheet_path,
                 illustration_type,
-                output_path
+                output_path,
+                style=style
             )
 
             passed, qa_result = self.qa_check(saved_path, scene_description)
@@ -414,7 +793,8 @@ class ArtPipeline:
     def generate_all(
         self,
         story_package: Dict,
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        style: Optional[str] = None
     ) -> Dict[str, any]:
         """
         Generate complete illustrated book from story package.
@@ -431,7 +811,9 @@ class ArtPipeline:
                 - "cover_scene": str - Cover illustration description
                 - "spreads": List[str] - 12 scene descriptions (one per spread)
                 - "back_cover_scene": str - Back cover description
+                - "art_style": str (optional) - Art style for illustrations
             output_dir: Directory to save all output files
+            style: Art style override. If None, uses story_package["art_style"] or instance style.
 
         Returns:
             Dictionary with generation results:
@@ -443,6 +825,9 @@ class ArtPipeline:
                 - "failed_images": List[str]
                 - "qa_results": Dict
         """
+        # Determine art style: method param > story_package > instance > default
+        art_style = style or story_package.get("art_style") or self.style or self.DEFAULT_STYLE
+        logger.info(f"Using art style: {art_style[:100]}...")
         if output_dir is None:
             output_dir = Path.home() / "books_output"
 
@@ -467,12 +852,19 @@ class ArtPipeline:
             if char_sheet_path.exists():
                 logger.info(f"Using existing character sheet: {char_sheet_path}")
                 results["character_sheet"] = char_sheet_path
+                # Analyze existing character sheet for visual consistency
+                if not self.character_visual_guide:
+                    logger.info("Analyzing existing character sheet for visual consistency...")
+                    self.character_visual_guide = self._analyze_character_sheet(char_sheet_path)
+                    if self.character_visual_guide:
+                        logger.info("Character visual guide extracted successfully")
             else:
                 logger.info("Step 1/3: Generating character sheet...")
                 try:
                     _, char_sheet_path = self.generate_character_sheet(
                         story_package["character_description"],
-                        char_sheet_path
+                        char_sheet_path,
+                        style=art_style
                     )
                     results["character_sheet"] = char_sheet_path
                 except Exception as e:
@@ -491,7 +883,8 @@ class ArtPipeline:
                         story_package["cover_scene"],
                         char_sheet_path,
                         illustration_type="cover",
-                        output_path=cover_path
+                        output_path=cover_path,
+                        style=art_style
                     )
 
                     passed, qa_result = self.qa_check(cover_path, story_package["cover_scene"])
@@ -534,7 +927,8 @@ class ArtPipeline:
                             spread_description,
                             char_sheet_path,
                             illustration_type="spread",
-                            output_path=spread_path
+                            output_path=spread_path,
+                            style=art_style
                         )
 
                         passed, qa_result = self.qa_check(
@@ -576,7 +970,8 @@ class ArtPipeline:
                         story_package["back_cover_scene"],
                         char_sheet_path,
                         illustration_type="back_cover",
-                        output_path=back_cover_path
+                        output_path=back_cover_path,
+                        style=art_style
                     )
 
                     passed, qa_result = self.qa_check(

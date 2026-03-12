@@ -1,5 +1,6 @@
 kdp:
   use_chrome_profile: true
+  chrome_profile_name: Profile 2
 defaults:
   trim_size: 8.5x8.5
   age_range: 3-6
@@ -13,13 +14,12 @@ art:
   style: Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich
     but not oversaturated colors. Visible painterly brushstroke texture. Similar to
     Pete Oswald or Benji Davies children's book illustrations. NOT digital vector,
-    NOT 3D, NOT photorealistic, NOT anime.
+    NOT 3D, NOT photorealistic, NOT anime. Character consistency across the full series -
+    same face, same color, same eye shape, same outfit, same proportions, same silhouette,
+    same world, same lighting language, same rendering style across every image.
   quality: high
   retries: 3
   qa_enabled: true
-  eye_instruction: "CRITICAL \u2014 CHARACTER EYES: Large, round, dark brown irises.\
-    \ Each eye MUST have TWO small bright white highlight dots (one larger catch-light,\
-    \ one smaller). Do NOT make eyes solid black."
 research:
   min_bsr: 100000
   max_competition_reviews: 50

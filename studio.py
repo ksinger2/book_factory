@@ -652,8 +652,12 @@ for page_num in range(1, story.get('pages', 24) + 1):
         continue
 
     prompt = story['art_prompts'][page_key]
-    art_style = "Soft gouache/watercolor painting. Warm, textured, hand-painted look."
-    full_prompt = f"{{prompt}}\\n\\nStyle: {{art_style}}"
+    # Use art_style from story/brief if available, otherwise use prompt as-is
+    art_style = story.get('art_style', '')
+    if art_style:
+        full_prompt = f"{{art_style}}\\n\\n{{prompt}}"
+    else:
+        full_prompt = prompt
 
     print(f"\\nGenerating {{page_key}}...")
     print(f"Prompt: {{prompt[:60]}}...")

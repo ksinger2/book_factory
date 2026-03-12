@@ -152,8 +152,16 @@ def api_story():
         engine = StoryEngine()
         result = engine.run(brief)
 
-        # Save to output dir
-        book_id = f"book-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # Save to output dir - use book title for directory name
+        title = result.get("story", {}).get("title", "untitled")
+        # Sanitize title for use as directory name
+        safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
+        safe_title = safe_title.strip().replace(" ", "_")[:50]  # Limit length
+        if not safe_title:
+            safe_title = "untitled"
+        # Add timestamp suffix to ensure uniqueness
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        book_id = f"{safe_title}-{timestamp}"
         book_dir = OUTPUT_DIR / book_id
         book_dir.mkdir(parents=True, exist_ok=True)
 
@@ -169,13 +177,30 @@ def api_story():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# Track cancelled jobs
+cancelled_jobs = set()
+
+@app.route('/api/art/cancel', methods=['POST'])
+def api_art_cancel():
+    """Cancel an art generation job."""
+    data = request.json
+    book_id = data.get("book_id")
+    if book_id:
+        cancelled_jobs.add(book_id)
+        log.info(f"Art generation cancelled for {book_id}")
+        return jsonify({"ok": True, "message": "Cancellation requested"})
+    return jsonify({"ok": False, "error": "No book_id provided"}), 400
+
 @app.route('/api/art', methods=['POST'])
 def api_art():
-    """Generate illustrations. Returns SSE stream for progress."""
+    """Generate illustrations with SSE progress updates."""
     data = request.json
     book_id = data.get("book_id")
     if not book_id:
         return jsonify({"ok": False, "error": "No book_id provided"}), 400
+
+    # Clear any previous cancellation for this job
+    cancelled_jobs.discard(book_id)
 
     book_dir = OUTPUT_DIR / book_id
     story_path = book_dir / "story_package.json"
@@ -184,32 +209,235 @@ def api_art():
         return jsonify({"ok": False, "error": "Story package not found. Generate story first."}), 400
 
     with open(story_path) as f:
-        story_package = json.load(f)
+        story_data = json.load(f)
 
-    def generate():
+    # Transform story data to art pipeline format
+    story = story_data.get('story', story_data)
+    character = story_data.get('character', {})
+    scenes = story.get('scenes', [])
+    metadata = story_data.get('metadata', {})
+    brief = metadata.get('brief', {})
+
+    # Get art style and user notes from brief
+    art_style = brief.get('art_style', '')
+    user_notes = brief.get('notes', '')
+    theme = brief.get('theme', '')
+
+    # Get eye style from brief or config
+    eye_style = brief.get('eye_style', '')
+    if not eye_style:
+        # Try to get from config
+        cfg = load_config()
+        eye_style = cfg.get('art', {}).get('eye_style', '')
+
+    # Get reference image if provided (base64 data URL)
+    reference_image = brief.get('reference_image', '')
+
+    # Build character description for consistency across all images
+    char_name = character.get('name', 'the main character')
+    char_desc = character.get('description', '')
+    char_species = character.get('species', '')
+
+    # Character consistency block - included in EVERY prompt
+    character_block = f"\n\nMain character: {char_name}"
+    if char_species:
+        character_block += f" (a {char_species})"
+    if char_desc:
+        character_block += f". {char_desc}"
+
+    # User restrictions block
+    restrictions = ""
+    if user_notes:
+        restrictions += f"\n\nIMPORTANT: {user_notes}"
+    if "no people" in user_notes.lower() or "no human" in user_notes.lower():
+        restrictions += " Only show the animal character(s), no humans."
+
+    # Build prompts with style, character, and restrictions
+    def build_prompt(base_prompt):
+        prompt = base_prompt
+        if art_style:
+            # Extract just the positive style elements (remove any NOT statements)
+            style_clean = ' '.join([s for s in art_style.split('.') if 'NOT' not in s.upper()])
+            prompt = f"{style_clean}\n\n{prompt}"
+        prompt += character_block
+        prompt += restrictions
+        return prompt
+
+    # Add eye style to character description if specified
+    char_description = build_prompt(character.get('sheet_prompt', character.get('description', '')))
+    if eye_style:
+        char_description += f"\n\nEYE STYLE: {eye_style}"
+
+    # Build spreads with full context (illustration prompt + page text)
+    spreads_with_context = []
+    for i, scene in enumerate(scenes):
+        page_text = "\n".join(scene.get('text', []))
+        illustration_prompt = build_prompt(scene.get('illustration_prompt', ''))
+        spreads_with_context.append({
+            "page_num": i + 1,
+            "illustration_prompt": illustration_prompt,
+            "page_text": page_text
+        })
+
+    art_package = {
+        "title": story.get('title', 'Untitled'),
+        "character_name": character.get('name', 'Character'),
+        "character_description": char_description,
+        "cover_scene": build_prompt(scenes[0].get('illustration_prompt', '')) if scenes else '',
+        "spreads": spreads_with_context,
+        "back_cover_scene": build_prompt(scenes[-1].get('illustration_prompt', '')) if scenes else '',
+        "art_style": art_style,
+        "eye_style": eye_style,
+        "character_block": character_block,
+        "restrictions": restrictions,
+        "reference_image": reference_image
+    }
+
+    art_dir = book_dir / "art"
+    art_dir.mkdir(exist_ok=True)
+
+    def generate_with_progress():
+        from agents.art_pipeline import ArtPipeline
+        import time
+
+        total_images = 2 + len(art_package['spreads'])  # char sheet + cover + spreads + back
+        current = 0
+
         try:
-            from agents.art_pipeline import ArtPipeline
+            # Initialize pipeline with art style, eye style, and reference image from the brief
+            art_style_for_pipeline = art_package.get('art_style', '')
+            eye_style_for_pipeline = art_package.get('eye_style', '')
+            reference_image_for_pipeline = art_package.get('reference_image', '')
+            pipeline = ArtPipeline(
+                style=art_style_for_pipeline,
+                eye_style=eye_style_for_pipeline,
+                reference_image=reference_image_for_pipeline
+            )
+            results = {
+                "success": False,
+                "character_sheet": None,
+                "cover": None,
+                "spreads": [],
+                "back_cover": None,
+                "failed_images": []
+            }
 
-            pipeline = ArtPipeline()
-            art_dir = book_dir / "art"
-            art_dir.mkdir(exist_ok=True)
+            # Character sheet
+            current += 1
+            yield f"data: {json.dumps({'stage': 'character_sheet', 'current': current, 'total': total_images, 'message': 'Generating character sheet...'})}\n\n"
 
-            yield f"data: {json.dumps({'stage': 'starting', 'message': 'Initializing art pipeline...'})}\n\n"
+            char_sheet_path = art_dir / "character_sheets" / f"{art_package['character_name']}_sheet.png"
+            char_sheet_path.parent.mkdir(parents=True, exist_ok=True)
 
-            result = pipeline.generate_all(story_package, output_dir=art_dir)
+            try:
+                _, char_path = pipeline.generate_character_sheet(
+                    art_package["character_description"],
+                    char_sheet_path,
+                    style=art_style_for_pipeline
+                )
+                results["character_sheet"] = str(char_path)
+                yield f"data: {json.dumps({'stage': 'character_sheet_done', 'current': current, 'total': total_images, 'message': 'Character sheet complete!'})}\n\n"
+            except Exception as e:
+                results["failed_images"].append(f"character_sheet: {str(e)}")
+                yield f"data: {json.dumps({'stage': 'character_sheet_error', 'current': current, 'total': total_images, 'message': f'Character sheet failed: {str(e)}'})}\n\n"
+                char_path = None
 
-            yield f"data: {json.dumps({'stage': 'complete', 'result': result})}\n\n"
+            # Cover
+            current += 1
+            yield f"data: {json.dumps({'stage': 'cover', 'current': current, 'total': total_images, 'message': 'Generating cover illustration...'})}\n\n"
+
+            if char_path and art_package.get('cover_scene'):
+                cover_path = art_dir / "cover.png"
+                try:
+                    _, cpath = pipeline.generate_illustration(
+                        art_package["cover_scene"],
+                        char_path,
+                        illustration_type="cover",
+                        output_path=cover_path,
+                        style=art_style_for_pipeline
+                    )
+                    results["cover"] = str(cpath)
+                    yield f"data: {json.dumps({'stage': 'cover_done', 'current': current, 'total': total_images, 'message': 'Cover complete!'})}\n\n"
+                except Exception as e:
+                    results["failed_images"].append(f"cover: {str(e)}")
+                    yield f"data: {json.dumps({'stage': 'cover_error', 'current': current, 'total': total_images, 'message': f'Cover failed: {str(e)}'})}\n\n"
+
+            # Spreads (scenes)
+            spreads = art_package.get('spreads', [])
+            story_title = art_package.get('title', 'Untitled')
+            char_block = art_package.get('character_block', '')
+
+            for i, spread_data in enumerate(spreads):
+                # Check for cancellation
+                if book_id in cancelled_jobs:
+                    yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
+                    cancelled_jobs.discard(book_id)
+                    return
+
+                current += 1
+                yield f"data: {json.dumps({'stage': 'spread', 'current': current, 'total': total_images, 'message': f'Generating illustration {i+1} of {len(spreads)}...'})}\n\n"
+
+                # Build full context for this page
+                if isinstance(spread_data, dict):
+                    spread_desc = spread_data.get('illustration_prompt', '')
+                    page_text = spread_data.get('page_text', '')
+                    page_num = spread_data.get('page_num', i + 1)
+                else:
+                    # Backwards compatibility
+                    spread_desc = spread_data
+                    page_text = ''
+                    page_num = i + 1
+
+                # Add story context to the prompt
+                story_context = f"""
+=== STORY CONTEXT ===
+Book Title: {story_title}
+Page {page_num} of {len(spreads)}
+{char_block}
+
+Page Text (the verse for this illustration):
+{page_text}
+
+=== ILLUSTRATION FOR THIS PAGE ===
+{spread_desc}"""
+
+                if char_path and spread_desc:
+                    spread_path = art_dir / f"scene_{i+1:02d}.png"
+                    try:
+                        _, spath = pipeline.generate_illustration(
+                            story_context,
+                            char_path,
+                            illustration_type="spread",
+                            output_path=spread_path,
+                            style=art_style_for_pipeline
+                        )
+                        results["spreads"].append(str(spath))
+                        yield f"data: {json.dumps({'stage': 'spread_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!'})}\n\n"
+                    except Exception as e:
+                        results["failed_images"].append(f"spread_{i+1}: {str(e)}")
+                        yield f"data: {json.dumps({'stage': 'spread_error', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} failed: {str(e)}'})}\n\n"
+
+            results["success"] = len(results["failed_images"]) == 0
+
+            # Save result
+            result_path = book_dir / "art_result.json"
+            with open(result_path, 'w') as f:
+                json.dump(results, f, indent=2, default=str)
+
+            yield f"data: {json.dumps({'stage': 'complete', 'current': total_images, 'total': total_images, 'message': 'Art generation complete!', 'result': results})}\n\n"
+
         except Exception as e:
-            yield f"data: {json.dumps({'stage': 'error', 'error': str(e)})}\n\n"
+            log.exception("Art generation failed")
+            yield f"data: {json.dumps({'stage': 'error', 'message': str(e)})}\n\n"
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate_with_progress(), mimetype='text/event-stream')
 
 
 @app.route('/api/pdf', methods=['POST'])
 def api_pdf():
     """Build PDFs from story + art."""
     try:
-        from agents.pdf_builder import PDFBuilder
+        from agents.pdf_builder import PDFBuilder, StoryPackage, StoryPage, TextOverlay
 
         data = request.json
         book_id = data.get("book_id")
@@ -224,11 +452,40 @@ def api_pdf():
             return jsonify({"ok": False, "error": "Story not found"}), 400
 
         with open(story_path) as f:
-            story = json.load(f)
+            story_data = json.load(f)
 
+        # Convert dict to StoryPackage dataclass
         cfg = load_config()
+        story_content = story_data.get('story', story_data)
+        listing = story_data.get('listing', {})
+
+        # Build pages from scenes
+        pages = []
+        scenes = story_content.get('scenes', [])
+        for i, scene in enumerate(scenes):
+            text = scene.get('text', [])
+            if isinstance(text, list):
+                text = '\n'.join(text)
+            pages.append(StoryPage(
+                image_path=f"scene_{i+1:02d}.png",
+                text_overlays=[TextOverlay(
+                    text=text,
+                    x=4.25,
+                    y=7.0,
+                    font_size=14
+                )]
+            ))
+
+        story_package = StoryPackage(
+            title=story_content.get('title', 'Untitled'),
+            author=cfg.get('defaults', {}).get('author_name', 'Unknown Author'),
+            subtitle=listing.get('subtitle', ''),
+            blurb=listing.get('description', ''),
+            pages=pages
+        )
+
         builder = PDFBuilder()
-        result = builder.build_all(story, str(art_dir), str(book_dir))
+        result = builder.build_all(story_package, str(art_dir), str(book_dir))
 
         return jsonify({"ok": True, "book_id": book_id, "result": result})
     except Exception as e:
@@ -240,21 +497,86 @@ def api_pdf():
 def api_publish():
     """Publish to KDP using Chrome profile."""
     try:
-        from agents.kdp_publisher import KDPPublisher
+        from agents.kdp_publisher import KDPPublisher, BookPackage, BookListing
 
         data = request.json
         book_id = data.get("book_id")
+        dry_run = data.get("dry_run", False)  # Set to True for testing without submitting
+
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id"}), 400
 
         book_dir = OUTPUT_DIR / book_id
+        story_path = book_dir / "story_package.json"
 
-        publisher = KDPPublisher(use_chrome_profile=True)
-        # Build BookPackage from files in book_dir
-        # This is the integration point — needs story + PDFs
-        result = {"status": "ready", "message": "Close Chrome, then click Publish to launch KDP automation."}
+        # Check required files exist
+        interior_pdf = book_dir / "Interior.pdf"
+        cover_pdf = book_dir / "Cover.pdf"
+        kindle_cover = book_dir / "Kindle_Cover.jpg"
 
-        return jsonify({"ok": True, "result": result})
+        missing = []
+        if not story_path.exists():
+            missing.append("story_package.json")
+        if not interior_pdf.exists():
+            missing.append("Interior.pdf")
+        if not cover_pdf.exists():
+            missing.append("Cover.pdf")
+        if not kindle_cover.exists():
+            missing.append("Kindle_Cover.jpg")
+
+        if missing:
+            return jsonify({"ok": False, "error": f"Missing files: {', '.join(missing)}. Run 'Build PDFs' first."}), 400
+
+        # Load story data
+        with open(story_path) as f:
+            story_data = json.load(f)
+
+        story = story_data.get('story', story_data)
+        listing_data = story_data.get('listing', {})
+        cfg = load_config()
+
+        # Build BookListing
+        book_listing = BookListing(
+            title=listing_data.get('title', story.get('title', 'Untitled')),
+            subtitle=listing_data.get('subtitle', ''),
+            author=cfg.get('defaults', {}).get('author_name', 'Unknown Author'),
+            description=listing_data.get('description', ''),
+            categories=listing_data.get('categories', ['Children\'s Books > Animals']),
+            keywords=listing_data.get('keywords', [])[:7],  # Max 7 keywords
+            ai_disclosure_text="Entire work, with extensive editing",
+            ai_tool_text="Claude",
+            ai_disclosure_images="Many AI-generated images, with extensive editing",
+            ai_tool_images="ChatGPT",
+            ai_disclosure_translation="None"
+        )
+
+        # Build BookPackage
+        book_package = BookPackage(
+            listing=book_listing,
+            interior_pdf_path=str(interior_pdf),
+            cover_pdf_path=str(cover_pdf),
+            cover_jpg_path=str(kindle_cover),
+            us_price=cfg.get('defaults', {}).get('us_price', 9.99),
+            is_kdp_select=True,
+            dry_run=dry_run
+        )
+
+        # Start publisher and publish
+        log.info(f"Starting KDP publish for: {book_listing.title}")
+        chrome_profile_name = cfg.get('kdp', {}).get('chrome_profile_name', 'Profile 2')
+        try:
+            with KDPPublisher(use_chrome_profile=True, chrome_profile_name=chrome_profile_name) as publisher:
+                result = publisher.publish_book(book_package)
+            return jsonify({"ok": True, "book_id": book_id, "result": result})
+        except Exception as browser_error:
+            error_msg = str(browser_error)
+            if "ProcessSingleton" in error_msg or "profile directory" in error_msg:
+                return jsonify({
+                    "ok": False,
+                    "error": "Chrome is currently running. Please close ALL Chrome windows and try again. The publisher needs exclusive access to your Chrome profile to use your Amazon login."
+                }), 400
+            raise
+
     except Exception as e:
         log.exception("Publish failed")
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -274,15 +596,16 @@ def api_books():
     """List all generated books."""
     books = []
     if OUTPUT_DIR.exists():
-        for d in sorted(OUTPUT_DIR.iterdir()):
-            if d.is_dir() and d.name.startswith("book-"):
-                info = {"id": d.name, "path": str(d)}
+        for d in sorted(OUTPUT_DIR.iterdir(), reverse=True):  # Newest first
+            if d.is_dir() and not d.name.startswith('.'):
+                # Check if it has a story_package.json (indicates it's a book)
                 story_path = d / "story_package.json"
                 if story_path.exists():
+                    info = {"id": d.name, "path": str(d)}
                     with open(story_path) as f:
                         pkg = json.load(f)
                     info["title"] = pkg.get("title") or pkg.get("story", {}).get("title", "Untitled")
-                books.append(info)
+                    books.append(info)
     return jsonify({"books": books})
 
 

@@ -68,17 +68,19 @@ class KDPPublisher:
     WAIT_LONG = 10
     WAIT_FILE_UPLOAD = 15
 
-    def __init__(self, headless: bool = False, debug: bool = False, use_chrome_profile: bool = True):
+    def __init__(self, headless: bool = False, debug: bool = False, use_chrome_profile: bool = True, chrome_profile_name: str = "Profile 2"):
         """Initialize KDP Publisher
 
         Args:
             headless: Run browser without GUI (won't work with use_chrome_profile)
             debug: Enable verbose logging
             use_chrome_profile: Launch using user's existing Chrome profile (reuses their KDP login)
+            chrome_profile_name: Name of Chrome profile to use (e.g., "Default", "Profile 2")
         """
         self.headless = headless if not use_chrome_profile else False  # Chrome profile needs GUI
         self.debug = debug
         self.use_chrome_profile = use_chrome_profile
+        self.chrome_profile_name = chrome_profile_name
         self.playwright = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
@@ -143,13 +145,16 @@ class KDPPublisher:
         if self.use_chrome_profile:
             chrome_profile = self._find_chrome_profile()
             if chrome_profile:
-                logger.info(f"Launching with Chrome profile: {chrome_profile}")
+                logger.info(f"Launching with Chrome profile: {chrome_profile} (profile: {self.chrome_profile_name})")
                 logger.info("NOTE: Close all Chrome windows first — Playwright needs exclusive access to the profile.")
                 self.context = self.playwright.chromium.launch_persistent_context(
                     user_data_dir=chrome_profile,
                     channel="chrome",  # Use installed Chrome, not bundled Chromium
                     headless=False,
-                    args=["--disable-blink-features=AutomationControlled"],
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        f"--profile-directory={self.chrome_profile_name}",
+                    ],
                 )
                 self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
                 logger.info("Browser started with existing Chrome profile (KDP login should be active)")

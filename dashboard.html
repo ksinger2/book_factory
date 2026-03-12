@@ -153,12 +153,13 @@ const S = {
   status: null,  // from /api/status
   config: { authorName:'Starlit Stories Press', publisher:'Starlit Stories Press' },
   book: {
-    category:'', ageRange:'3-6', theme:'', animal:'', lesson:'', notes:'',
+    category:'', ageRange:'3-6', theme:'', animal:'', lesson:'', setting:'', tone:'whimsical', notes:'',
+    referenceImage: null, referenceImagePreview: '',
     artStyle:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations.',
     trimSize:'8.5x8.5', formats:['paperback','ebook'], pricePaperback:'9.99', priceEbook:'4.99'
   },
   research: { results:[], selected:null, loading:false },
-  gen: { bookId:null, story:null, stages:{research:'pending',story:'pending',art:'pending',pdf:'pending',publish:'pending'}, log:[] }
+  gen: { bookId:null, story:null, artProgress:null, stages:{research:'pending',story:'pending',art:'pending',pdf:'pending',publish:'pending'}, log:[] }
 };
 
 const STEPS = [
@@ -178,13 +179,17 @@ const CATS = [
 
 const STYLES = [
   {name:'Gouache / Watercolor', desc:'Warm, painterly, textured — like Pete Oswald', colors:['#e8976c','#7cb5a0','#f4d590','#5a7fa0'],
-   value:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations. NOT digital vector, NOT 3D, NOT photorealistic, NOT anime.'},
+   value:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations. NOT digital vector, NOT 3D, NOT photorealistic, NOT anime. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image.'},
   {name:'Digital Illustration', desc:'Clean, vibrant, modern — like Pixar concept art', colors:['#ff6b8a','#4ecdc4','#ffe66d','#6c5ce7'],
-   value:'Clean digital illustration with soft gradients, vibrant saturated colors, rounded friendly shapes. Similar to modern Pixar concept art or Lorena Alvarez. NOT photorealistic, NOT 3D rendered.'},
+   value:'Clean digital illustration with soft gradients, vibrant saturated colors, rounded friendly shapes. Similar to modern Pixar concept art or Lorena Alvarez. NOT photorealistic, NOT 3D rendered. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image.'},
   {name:'Colored Pencil', desc:'Soft, sketchy, storybook — like Oliver Jeffers', colors:['#d4a574','#8fbc8f','#e6c88a','#b0a090'],
-   value:'Colored pencil illustration with visible pencil strokes and soft blending. Warm muted palette, slightly grainy paper texture. Similar to Oliver Jeffers or Jon Klassen. Gentle and whimsical.'},
+   value:'Colored pencil illustration with visible pencil strokes and soft blending. Warm muted palette, slightly grainy paper texture. Similar to Oliver Jeffers or Jon Klassen. Gentle and whimsical. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image.'},
   {name:'Flat / Graphic', desc:'Bold shapes, solid colors — like Mary Blair', colors:['#ff4757','#2ed573','#ffa502','#3742fa'],
-   value:'Modern flat illustration with bold solid colors, simple geometric shapes, clean lines. Playful and graphic. Similar to Ingela P Arrhenius or Mary Blair. Minimal texture.'},
+   value:'Modern flat illustration with bold solid colors, simple geometric shapes, clean lines. Playful and graphic. Similar to Ingela P Arrhenius or Mary Blair. Minimal texture. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image.'},
+  {name:'Ghibli', desc:'Dreamy hand-painted anime — like Studio Ghibli', colors:['#8fbc8f','#87ceeb','#f5f5dc','#deb887'],
+   value:'In the style of Studio Ghibli: Whimsical hand-painted animated film still, dreamy storybook atmosphere, lush natural environments, soft watercolor and gouache textures, warm diffused sunlight, gentle nostalgic mood, magical realism, cozy lived-in details, rounded expressive character design, delicate environmental storytelling, rich greenery, drifting clouds, subtle wind movement through grass and fabric, cinematic composition, emotional quietness, wonder in ordinary moments, beautifully detailed background art, soft edges, matte painted finish, harmonious pastel-earth color palette, moss green, sky blue, cream, warm wood, muted coral, golden highlights. Series continuity: same main character, same outfit, same face, same hair, same proportions, same art direction, same color palette, same world, same lighting language, same setting logic, same rendering style across every image. For consistency across multiple images: character turnaround consistency, identical facial features, identical costume details, repeated environmental motifs, recurring props, recurring architecture, recurring plant types, visual continuity, sequential storytelling, cohesive children\'s fantasy film look.'},
+  {name:'Tim Burton', desc:'Dark whimsical gothic — eerie but lovable', colors:['#2c2c34','#6b7b8c','#8b7355','#d4c4b0'],
+   value:'Illustrated in a dark whimsical gothic fantasy style, eerie but lovable, soft features, oversized expressive eyes, slightly elongated silhouette, charmingly odd proportions, wearing simple vintage storybook clothes, standing in a crooked enchanted forest with twisted trees, curling vines, fog, moonlight, and gothic fairytale details, hand-drawn ink-like linework, textured painted finish, muted earthy palette with pale gray-blue mist and subtle sepia tones, spooky yet warm, cinematic composition. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image. For multi-image continuity: character turnaround consistency, identical costume details, recurring props, recurring forest motifs, recurring crooked trees and spiral patterns, visual continuity, sequential storytelling, cohesive gothic children\'s fantasy film look. Like it was illustrated by Tim Burton.'},
   {name:'Custom', desc:'Write your own style prompt', colors:['#888','#aaa','#666','#bbb'], value:''}
 ];
 
@@ -339,13 +344,14 @@ function pickNiche(i) {
   S.book.theme = n.theme || n.brief?.theme || '';
   S.book.animal = n.animal || n.brief?.animal || '';
   S.book.lesson = n.lesson || n.brief?.lesson || '';
+  S.book.setting = n.setting || n.brief?.setting || '';
   render();
 }
 
 async function runResearch() {
   S.research.loading = true; render();
   try {
-    const r = await api('/api/research', { use_fallback: true });
+    const r = await api('/api/research', { use_fallback: false });
     if (r.ok) S.research.results = r.niches || [];
     else alert('Research failed: ' + (r.error||'Unknown error'));
   } catch(e) { alert('Server error: ' + e.message); }
@@ -376,11 +382,36 @@ function vBrief() {
         </select></div>
       </div>
       <div class="row">
-        <div class="field"><label>Main Character Animal</label><input id="animal" value="${S.book.animal}" placeholder="fox, owl, bunny... (blank = AI picks)"/></div>
+        <div class="field"><label>Main Character</label><input id="animal" value="${S.book.animal}" placeholder="e.g. 'a boy named James', 'a talking bus', 'a brave goose'"/></div>
         <div class="field"><label>Core Lesson</label><input id="lesson" value="${S.book.lesson}" placeholder="bravery, kindness... (blank = AI picks)"/></div>
       </div>
-      <div class="field"><label>Theme / Setting</label><input id="theme" value="${S.book.theme}" placeholder="forest adventure, underwater world, starlit journey..."/></div>
-      <div class="field"><label>Extra Notes (optional)</label><textarea id="notes" rows="2" placeholder="Character name, plot ideas, tone, season...">${S.book.notes||''}</textarea></div>
+      <div class="row">
+        <div class="field"><label>Theme</label><input id="theme" value="${S.book.theme}" placeholder="adventure, friendship, discovery..."/></div>
+        <div class="field"><label>Setting / Location</label><input id="setting" value="${S.book.setting}" placeholder="forest, ocean, mountains, space..."/></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Tone</label><select id="tone">
+          <option ${S.book.tone==='whimsical'?'selected':''} value="whimsical">Whimsical</option>
+          <option ${S.book.tone==='adventurous'?'selected':''} value="adventurous">Adventurous</option>
+          <option ${S.book.tone==='calm'?'selected':''} value="calm">Calm & Gentle</option>
+          <option ${S.book.tone==='humorous'?'selected':''} value="humorous">Humorous</option>
+          <option ${S.book.tone==='heartfelt'?'selected':''} value="heartfelt">Heartfelt</option>
+        </select></div>
+        <div class="field"><label>Extra Notes (optional)</label><input id="notes" value="${S.book.notes||''}" placeholder="Character name, plot ideas, season..."/></div>
+        <div class="field">
+          <label>Reference Image (optional)</label>
+          <div class="hint">Upload an image to use as visual reference for the character design</div>
+          <div style="display:flex;gap:12px;align-items:flex-start;margin-top:8px;">
+            <input type="file" id="refImage" accept="image/*" onchange="handleRefImage(this)" style="flex:1;"/>
+            ${S.book.referenceImagePreview ? `
+              <div style="position:relative;">
+                <img src="${S.book.referenceImagePreview}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--border);"/>
+                <button onclick="clearRefImage()" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer;font-size:12px;">×</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
     </div>
     <div class="actions">
       <button class="btn btn-ghost" onclick="go(1)">← Research</button>
@@ -389,9 +420,29 @@ function vBrief() {
   </div>`;
 }
 
+function handleRefImage(input) {
+  const file = input.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      S.book.referenceImage = e.target.result; // base64 data URL
+      S.book.referenceImagePreview = e.target.result;
+      render();
+    };
+    reader.readAsDataURL(file);
+  }
+}
+
+function clearRefImage() {
+  S.book.referenceImage = null;
+  S.book.referenceImagePreview = '';
+  render();
+}
+
 function saveBrief() {
   S.book.category=v('category'); S.book.ageRange=v('ageRange'); S.book.animal=v('animal');
-  S.book.lesson=v('lesson'); S.book.theme=v('theme'); S.book.notes=v('notes');
+  S.book.lesson=v('lesson'); S.book.theme=v('theme'); S.book.setting=v('setting');
+  S.book.tone=v('tone'); S.book.notes=v('notes');
   go(3);
 }
 
@@ -509,7 +560,7 @@ function vGenerate() {
     <div class="card">
       <h3>Summary</h3>
       <div style="font-size:12px;color:var(--dim);line-height:1.8;">
-        <strong style="color:var(--text);">${S.book.category||'No category'}</strong> · Ages ${S.book.ageRange} · ${S.book.animal||'AI picks animal'}<br/>
+        <strong style="color:var(--text);">${S.book.category||'No category'}</strong> · Ages ${S.book.ageRange} · ${S.book.animal||'AI picks character'}<br/>
         Theme: ${S.book.theme||'AI picks'} · Lesson: ${S.book.lesson||'AI picks'}<br/>
         Formats: ${S.book.formats.join(' + ')} · $${S.book.pricePaperback} / $${S.book.priceEbook}
       </div>
@@ -519,25 +570,41 @@ function vGenerate() {
       <h3>Pipeline</h3>
       ${stages.map(s => {
         const st = S.gen.stages[s.key];
+        const prog = S.gen.artProgress;
+        const showProgress = s.key === 'art' && st === 'running' && prog;
         return `<div class="pipeline-stage ${st}">
           <div class="stage-icon">${st==='done'?'✓':st==='running'?'⟳':st==='error'?'✗':'○'}</div>
-          <div class="stage-info">
+          <div class="stage-info" style="flex:1;">
             <div class="stage-title">${s.name}</div>
-            <div class="stage-detail">${s.desc}</div>
+            <div class="stage-detail">${showProgress ? prog.message : s.desc}</div>
+            ${showProgress ? `
+              <div style="margin-top:8px;">
+                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:3px;">
+                  <span>Progress</span>
+                  <span>${prog.current} / ${prog.total} images</span>
+                </div>
+                <div class="meter-track">
+                  <div class="meter-fill demand" style="width:${Math.round((prog.current/prog.total)*100)}%;transition:width 0.3s;"></div>
+                </div>
+              </div>
+            ` : ''}
           </div>
-          ${st==='pending'?`<button class="btn btn-secondary" onclick="runStage('${s.key}')" ${s.key!=='story'&&S.gen.stages.story==='pending'?'disabled':''}>Run</button>`:''}
-          ${st==='running'?'<span class="spinner"></span>':''}
+          ${st==='pending'?`<button class="btn btn-secondary" onclick="runStage('${s.key}')" ${s.key!=='story'&&S.gen.stages.story==='pending'?'disabled':''}>Run</button>${s.key==='story'?'<button class="btn btn-ghost" onclick="loadDemoStory()" style="margin-left:6px;">[Sample]</button>':''}`:''}
+          ${st==='running'?`<span class="spinner"></span><button class="btn btn-ghost" onclick="cancelGeneration('${s.key}')" style="margin-left:8px;color:#ff6b6b;">✕ Cancel</button>`:''}
         </div>`;
       }).join('')}
     </div>
 
     ${S.gen.story ? `<div class="card">
-      <h3>Story Preview: ${S.gen.story.title||S.gen.story.story?.title||''}</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0;">Story Preview: ${S.gen.story.title||S.gen.story.story?.title||''}</h3>
+        <button class="btn btn-secondary" onclick="regenerateStory()">↻ Regenerate Story</button>
+      </div>
       <div class="story-preview">
         ${(S.gen.story.story?.scenes||S.gen.story.scenes||[]).map((sc,i) => `
           <div class="story-scene">
             <div class="scene-num">Scene ${i+1}</div>
-            <div>${sc.text||sc.content||''}</div>
+            <div>${Array.isArray(sc.text) ? sc.text.join('<br/>') : (sc.text||sc.content||'')}</div>
           </div>
         `).join('')}
       </div>
@@ -566,9 +633,11 @@ async function runStage(stage) {
       const brief = {
         category: S.book.category, age_range: S.book.ageRange,
         animal: S.book.animal, theme: S.book.theme,
-        lesson: S.book.lesson, notes: S.book.notes,
+        lesson: S.book.lesson, setting: S.book.setting,
+        tone: S.book.tone, notes: S.book.notes,
         art_style: S.book.artStyle, trim_size: S.book.trimSize,
-        formats: S.book.formats
+        formats: S.book.formats,
+        reference_image: S.book.referenceImage
       };
       const r = await api('/api/story', brief);
       if (r.ok) {
@@ -580,13 +649,57 @@ async function runStage(stage) {
     }
     else if (stage === 'art') {
       if (!S.gen.bookId) { alert('Generate story first'); S.gen.stages.art='pending'; render(); return; }
-      // SSE stream
-      const evtSource = new EventSource(`/api/art?book_id=${S.gen.bookId}`);
-      // Fallback: POST
-      const r = await api('/api/art', { book_id: S.gen.bookId });
-      // Art is long-running — for now just mark done
-      S.gen.stages.art = 'done';
-      S.gen.log.push(`[${new Date().toLocaleTimeString()}] Art generation complete`);
+
+      // Use SSE for real-time progress with abort controller
+      S.gen.artAbortController = new AbortController();
+      await new Promise((resolve, reject) => {
+        fetch('/api/art', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ book_id: S.gen.bookId }),
+          signal: S.gen.artAbortController.signal
+        }).then(response => {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          function read() {
+            reader.read().then(({done, value}) => {
+              if (done) {
+                S.gen.stages.art = 'done';
+                S.gen.log.push(`[${new Date().toLocaleTimeString()}] Art generation complete`);
+                resolve();
+                return;
+              }
+
+              const text = decoder.decode(value);
+              const lines = text.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+                    S.gen.artProgress = data;
+                    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ${data.message}`);
+                    render();
+
+                    if (data.stage === 'error') {
+                      reject(new Error(data.message));
+                      return;
+                    }
+                    if (data.stage === 'complete') {
+                      S.gen.stages.art = 'done';
+                      resolve();
+                      return;
+                    }
+                  } catch(e) {}
+                }
+              }
+              read();
+            }).catch(reject);
+          }
+          read();
+        }).catch(reject);
+      });
     }
     else if (stage === 'pdf') {
       if (!S.gen.bookId) { alert('Generate story + art first'); S.gen.stages.pdf='pending'; render(); return; }
@@ -605,6 +718,95 @@ async function runStage(stage) {
     S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
   }
   render();
+}
+
+function cancelGeneration(stage) {
+  if (stage === 'art' && S.gen.artAbortController) {
+    S.gen.artAbortController.abort();
+    S.gen.stages.art = 'pending';
+    S.gen.artProgress = null;
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Art generation CANCELLED by user`);
+    // Also tell the server to stop
+    fetch('/api/art/cancel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ book_id: S.gen.bookId })
+    }).catch(() => {});
+    render();
+  } else if (stage === 'story') {
+    // Story generation is harder to cancel, just mark as pending
+    S.gen.stages.story = 'pending';
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Story generation cancelled (will complete in background)`);
+    render();
+  }
+}
+
+async function regenerateStory() {
+  if (!confirm('Regenerate the story? This will create a new version.')) return;
+  // Reset story-related state but keep the book brief
+  S.gen.story = null;
+  S.gen.bookId = null;
+  S.gen.stages.story = 'pending';
+  S.gen.stages.art = 'pending';
+  S.gen.stages.pdf = 'pending';
+  S.gen.stages.publish = 'pending';
+  S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating story...`);
+  render();
+  // Auto-run story generation
+  await runStage('story');
+}
+
+async function loadDemoStory() {
+  try {
+    // First try to find any existing book with a valid story
+    const booksResp = await fetch('/api/books');
+    const booksData = await booksResp.json();
+
+    if (booksData.books && booksData.books.length > 0) {
+      // Try books from newest to oldest until we find one with a story
+      for (let i = booksData.books.length - 1; i >= 0; i--) {
+        const book = booksData.books[i];
+        const bookId = book.id;
+
+        const resp = await fetch(`/api/files/${bookId}/story_package.json`);
+        if (!resp.ok) continue; // Try next book
+
+        const data = await resp.json();
+
+        S.gen.bookId = bookId;
+        S.gen.story = data.story || data;
+        S.gen.stages.story = 'done';
+        S.gen.log.push(`[${new Date().toLocaleTimeString()}] Loaded existing story: "${data.story?.title || data.title}"`);
+
+        // Also load the brief
+        const briefResp = await fetch(`/api/files/${bookId}/brief.json`);
+        if (briefResp.ok) {
+          const brief = await briefResp.json();
+          S.book = {
+            ...S.book,
+            category: brief.category || S.book.category,
+            ageRange: brief.age_range || S.book.ageRange,
+            animal: brief.animal || S.book.animal,
+            theme: brief.theme || S.book.theme,
+            lesson: brief.lesson || S.book.lesson,
+            setting: brief.setting || S.book.setting,
+            tone: brief.tone || S.book.tone,
+            notes: brief.notes || S.book.notes,
+            artStyle: brief.art_style || S.book.artStyle,
+            trimSize: brief.trim_size || S.book.trimSize
+          };
+        }
+
+        render();
+        return; // Found a valid book, exit
+      }
+      alert('No books with valid stories found. Generate a story first.');
+    } else {
+      alert('No existing books found. Generate a story first.');
+    }
+  } catch (e) {
+    alert('Failed to load story: ' + e.message);
+  }
 }
 
 // ─── Step 7: Output ───
@@ -645,7 +847,7 @@ function vOutput() {
 function startNew() {
   S.gen = {bookId:null,story:null,stages:{story:'pending',art:'pending',pdf:'pending',publish:'pending'},log:[]};
   S.research.selected = null;
-  S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.notes='';
+  S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.setting=''; S.book.tone='whimsical'; S.book.notes='';
   go(1);
 }
 

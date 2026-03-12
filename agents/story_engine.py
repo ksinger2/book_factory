@@ -12,9 +12,10 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict
-import anthropic
+from openai import OpenAI, RateLimitError, APIError
 
 
 @dataclass
@@ -49,33 +50,33 @@ class ListingData:
 
 class StoryEngine:
     """
-    Generates complete story packages for children's books using Claude API.
+    Generates complete story packages for children's books using OpenAI GPT API.
 
     Handles story generation, character design, Amazon listings, and quality validation.
     """
 
-    def __init__(self, api_key: Optional[str] = None, max_retries: int = 3):
+    def __init__(self, api_key: Optional[str] = None, max_retries: int = 5):
         """
-        Initialize the StoryEngine with Anthropic API client.
+        Initialize the StoryEngine with OpenAI API client.
 
         Args:
-            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
             max_retries: Maximum retry attempts for API calls
         """
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+            raise ValueError("OPENAI_API_KEY environment variable not set")
 
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+        self.client = OpenAI(api_key=self.api_key)
         self.max_retries = max_retries
-        self.model = "claude-3-5-sonnet-20241022"
+        self.model = "gpt-4o"
 
     def _call_api(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
         """
-        Call Claude API with retry logic.
+        Call OpenAI API with retry logic.
 
         Args:
-            system_prompt: System prompt for Claude
+            system_prompt: System prompt for GPT
             user_prompt: User message
             max_tokens: Maximum tokens in response
 
@@ -87,26 +88,33 @@ class StoryEngine:
         """
         for attempt in range(self.max_retries):
             try:
-                message = self.client.messages.create(
+                response = self.client.chat.completions.create(
                     model=self.model,
                     max_tokens=max_tokens,
-                    system=system_prompt,
                     messages=[
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
                     ]
                 )
-                return message.content[0].text
-            except anthropic.RateLimitError:
+                return response.choices[0].message.content
+            except RateLimitError as e:
+                error_msg = str(e)
+                print(f"Rate limit error: {error_msg}")
+
+                # Check if it's a quota issue (won't resolve with waiting)
+                if "quota" in error_msg.lower() or "exceeded" in error_msg.lower():
+                    raise ValueError(f"API quota exceeded. Check your OpenAI account billing/limits: {error_msg}")
+
                 if attempt < self.max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff
-                    print(f"Rate limited. Waiting {wait_time}s before retry...")
+                    wait_time = 60 * (attempt + 1)  # 60s, 120s, 180s, 240s backoff
+                    print(f"Rate limited. Waiting {wait_time}s before retry (attempt {attempt + 1}/{self.max_retries})...")
                     time.sleep(wait_time)
                 else:
-                    raise ValueError("Max retries exceeded due to rate limiting")
-            except anthropic.APIError as e:
+                    raise ValueError(f"Max retries exceeded. Rate limit error: {error_msg}")
+            except APIError as e:
                 if attempt < self.max_retries - 1:
                     print(f"API error: {e}. Retrying...")
-                    time.sleep(1)
+                    time.sleep(5)
                 else:
                     raise ValueError(f"API error after {self.max_retries} attempts: {e}")
 
@@ -126,7 +134,37 @@ class StoryEngine:
         Returns:
             Dict with story data including title and 12 scenes
         """
-        system_prompt = """You are an expert children's book author specializing in rhyming stories.
+        system_prompt = """You are an expert children's book author and editor specializing in rhyming stories.
+
+GRAMMAR & WRITING RULES (MUST FOLLOW):
+1. CAPITALIZATION:
+   - Only capitalize the first word of sentences
+   - Only capitalize proper nouns (character names, place names)
+   - NEVER capitalize common words mid-sentence (wrong: "The Happy Penguin", correct: "The happy penguin")
+
+2. PUNCTUATION:
+   - Use exactly ONE punctuation mark at the end of each sentence
+   - NEVER use double punctuation (no ".." or "!!" or "?," or "!.")
+   - Use commas for natural pauses in longer sentences
+   - Use periods, exclamation marks, or question marks appropriately
+
+3. SENTENCE STRUCTURE:
+   - Complete sentences with subject and verb
+   - Simple vocabulary appropriate for ages 3-6
+   - Avoid run-on sentences
+   - Keep sentences short and clear
+
+4. RHYMING COUPLETS:
+   - Each couplet must have a clear, true rhyme (not near-rhyme)
+   - Maintain consistent rhythm/meter within couplets
+   - Lines 1&2 must rhyme, and lines 3&4 must rhyme (AABB pattern)
+
+5. BEFORE OUTPUTTING - SELF-REVIEW CHECKLIST:
+   - Review EVERY line for grammar errors
+   - Check capitalization of every word - no random capitals
+   - Verify punctuation is correct and not duplicated
+   - Read aloud mentally to catch awkward phrasing
+
 Create stories that are:
 - Age-appropriate and wholesome
 - Written in consistent AABB rhyming couplets
@@ -143,21 +181,84 @@ Each scene needs:
 
 Format your response as valid JSON."""
 
-        user_prompt = f"""Create a children's story with these specifications:
-Theme: {brief.get('theme', 'adventure')}
-Main Character: {brief.get('animal', 'woodland creature')}
-Age Range: {brief.get('age_range', '3-5 years')}
-Lesson: {brief.get('lesson', 'friendship')}
-Setting: {brief.get('setting', 'enchanted forest')}
-Tone: {brief.get('tone', 'whimsical')}
+        notes = brief.get('notes', '').strip()
+        art_style = brief.get('art_style', '').strip()
+
+        # Load grammar guide if available
+        grammar_guide = ""
+        grammar_path = Path(__file__).parent.parent / "resources" / "grammar_guide.txt"
+        if grammar_path.exists():
+            with open(grammar_path) as f:
+                grammar_guide = f.read()
+
+        # Build all fields - collect what user actually provided
+        category = brief.get('category', '').strip()
+        main_char = brief.get('animal', brief.get('character', '')).strip()
+        theme = brief.get('theme', '').strip()
+        age_range = brief.get('age_range', '3-5 years').strip()
+        lesson = brief.get('lesson', '').strip()
+        setting = brief.get('setting', '').strip()
+        tone = brief.get('tone', 'whimsical').strip()
+
+        # Build specifications - only include what user provided
+        specs = []
+        if category:
+            specs.append(f"Category: {category}")
+        if main_char:
+            specs.append(f"Main Character: {main_char}")
+        if theme:
+            specs.append(f"Theme: {theme}")
+        specs.append(f"Age Range: {age_range}")
+        if lesson:
+            specs.append(f"Lesson/Moral: {lesson}")
+        if setting:
+            specs.append(f"Setting/Location: {setting}")
+        specs.append(f"Tone: {tone}")
+        if art_style:
+            specs.append(f"Art Style: {art_style}")
+
+        specs_text = "\n".join(specs)
+
+        # User notes/requirements take highest priority
+        notes_section = ""
+        if notes:
+            notes_section = f"""
+============================================
+CRITICAL USER REQUIREMENTS - YOU MUST FOLLOW THESE EXACTLY:
+{notes}
+============================================
+"""
+
+        # DEBUG: Print what we're sending to GPT
+        print("\n" + "="*60)
+        print("DEBUG: PROMPT BEING SENT TO GPT")
+        print("="*60)
+        print(f"BRIEF RECEIVED:")
+        for k, v in brief.items():
+            if k != 'reference_image':  # Skip huge base64
+                print(f"  {k}: {str(v)[:200]}")
+        print(f"\nSPECS TEXT:\n{specs_text}")
+        print(f"\nNOTES SECTION:\n{notes_section}")
+        print("="*60 + "\n")
+
+        user_prompt = f"""YOU MUST CREATE A STORY THAT MATCHES THESE EXACT SPECIFICATIONS:
+{notes_section}
+{specs_text}
+
+IMPORTANT: The story MUST feature the Main Character specified above.
+The story MUST take place in the Setting specified above.
+The story MUST teach the Lesson specified above.
+DO NOT ignore any of these specifications. DO NOT substitute different characters, settings, or themes.
 
 Generate a complete story package with:
 - A catchy, age-appropriate title
 - Exactly 12 scenes
 - Each scene with 4 lines of AABB rhyming verse
-- Detailed illustration prompts for each scene
+- Detailed illustration prompts for each scene that match the Art Style specified above
 - Composition notes for artists (landscape/portrait, character placement, background details)
 - Text positioning (where text should go relative to the illustration)
+
+IMPORTANT: Each illustration_prompt MUST begin with the art style description to ensure visual consistency.
 
 Return as JSON with this structure:
 {{
@@ -172,7 +273,15 @@ Return as JSON with this structure:
         }},
         ...
     ]
-}}"""
+}}
+
+{f'GRAMMAR REFERENCE:{chr(10)}{grammar_guide}' if grammar_guide else ''}
+
+FINAL REMINDER: Before outputting, carefully review ALL text for:
+- No random capitalized words mid-sentence
+- No double punctuation (.., !!, etc.)
+- Proper grammar and sentence structure
+- True rhymes (not near-rhymes)"""
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=4096)
 
@@ -227,6 +336,90 @@ Return as JSON:
     "description": "Full physical description including fur color, eye color and detail, size, distinctive marks, and personality traits visible in appearance",
     "sheet_prompt": "Detailed prompt for generating character sheet illustration",
     "style": "Art style guide (e.g., 'Soft, rounded shapes. Gentle colors. Expressive eyes. Whimsical and warm.')"
+}}"""
+
+        response = self._call_api(system_prompt, user_prompt, max_tokens=2048)
+
+        try:
+            character_data = json.loads(response)
+        except json.JSONDecodeError:
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
+            if json_match:
+                character_data = json.loads(json_match.group(1))
+            else:
+                raise ValueError(f"Failed to parse character JSON: {response[:200]}")
+
+        return character_data
+
+    def generate_character_from_story(self, story: Dict[str, Any], brief: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate character description based on the actual generated story.
+
+        Args:
+            story: The generated story with title and scenes
+            brief: Original story brief
+
+        Returns:
+            Character data dict matching the story's main character
+        """
+        story_title = story.get('title', 'Untitled')
+        scenes = story.get('scenes', [])
+
+        # Get text from first few scenes to understand the character
+        story_text = ""
+        for scene in scenes[:3]:
+            text = scene.get('text', [])
+            if isinstance(text, list):
+                story_text += ' '.join(text) + ' '
+            else:
+                story_text += str(text) + ' '
+
+        # Get user notes for character appearance
+        user_notes = brief.get('notes', '')
+        main_char_input = brief.get('animal', brief.get('character', ''))
+
+        system_prompt = """You are an expert character designer for children's books.
+Based on the story provided, extract and describe the MAIN CHARACTER that appears in the story.
+Create a detailed visual description for illustration purposes.
+The character description MUST match exactly what appears in the story AND the user's requirements.
+
+CRITICAL: You MUST include these physical attributes in the description:
+- SKIN TONE / ETHNICITY (if the character is human or humanoid) - be specific!
+- Hair color, style, and texture
+- Eye color and shape
+- Body type and build
+- Clothing and accessories
+
+Return valid JSON format."""
+
+        user_prompt = f"""Based on this children's story, create a character sheet for the MAIN CHARACTER.
+
+USER'S CHARACTER REQUIREMENTS (MUST FOLLOW):
+{main_char_input}
+{f"Additional notes: {user_notes}" if user_notes else ""}
+
+STORY TITLE: {story_title}
+
+STORY EXCERPT:
+{story_text}
+
+Extract the main character from this story and create:
+1. The character's exact name as it appears in the story
+2. What type of character they are (animal, object, person, etc.)
+3. Physical description for illustration - MUST include skin tone/ethnicity if human!
+4. Character sheet prompt for artists
+5. Art style notes
+
+IMPORTANT: If the user specified skin tone, ethnicity, or race (e.g., "black girl", "Asian boy", "brown skin"),
+you MUST include this prominently in both the description and sheet_prompt!
+
+Return as JSON:
+{{
+    "name": "Character's exact name from the story",
+    "species": "what they are (person, fox, bunny, etc.)",
+    "description": "Full physical description - MUST include skin tone/color for human characters, hair color, eye color, clothing",
+    "sheet_prompt": "Detailed prompt including SKIN TONE, hair, eyes, clothing - be explicit about ethnicity if human",
+    "style": "Art style guide matching {brief.get('age_range', '3-5')} age range"
 }}"""
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=2048)
@@ -399,9 +592,20 @@ Return as JSON:
         else:
             print("    Story validation passed!")
 
-        # Generate character
-        print("  3. Generating character description...")
-        character = self.generate_character(brief)
+        # Extract character info from story for consistency
+        # Update brief with story's actual character so character sheet matches
+        story_title = story.get('title', '')
+        first_scene = story.get('scenes', [{}])[0].get('text', [])
+        first_scene_text = ' '.join(first_scene) if isinstance(first_scene, list) else first_scene
+
+        # Create character brief based on actual story content
+        character_brief = brief.copy()
+        character_brief['story_title'] = story_title
+        character_brief['story_context'] = first_scene_text
+
+        # Generate character based on actual story
+        print("  3. Generating character description (from story)...")
+        character = self.generate_character_from_story(story, brief)
 
         # Generate listing
         print("  4. Generating Amazon listing...")

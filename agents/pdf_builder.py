@@ -327,24 +327,23 @@ class PDFBuilder:
         logger.info(f"Building all files to: {output_dir}")
 
         output_path = Path(output_dir)
+        art_path = Path(art_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
         results = {}
 
-        # Interior PDF
-        interior_path = output_path / f"{story_package.title.lower().replace(' ', '_')}_interior.pdf"
+        # Interior PDF - use standardized name for dashboard compatibility
+        interior_path = output_path / "Interior.pdf"
         results['interior'] = self.build_interior(story_package, art_dir, str(interior_path))
 
-        # Cover PDF
-        # Count total pages for spine width calculation
+        # Cover PDF - use standardized name for dashboard compatibility
         total_pages = self.MIN_PAGES
-        cover_path = output_path / f"{story_package.title.lower().replace(' ', '_')}_cover.pdf"
+        cover_path = output_path / "Cover.pdf"
         results['cover'] = self.build_cover(story_package, art_dir, str(cover_path), total_pages)
 
-        # Kindle Cover JPG
-        # First create a temporary PNG to convert
-        cover_png_path = output_path / "temp_cover.png"
-        kindle_cover_path = output_path / f"{story_package.title.lower().replace(' ', '_')}_kindle_cover.jpg"
+        # Kindle Cover JPG - use the cover.png from art directory
+        cover_png_path = art_path / "cover.png"
+        kindle_cover_path = output_path / "Kindle_Cover.jpg"
         results['kindle_cover'] = self.build_kindle_cover(str(cover_png_path), str(kindle_cover_path))
 
         logger.info(f"Build complete: {results}")
@@ -467,14 +466,14 @@ class PDFBuilder:
         if overlay.drop_shadow:
             # Shadow
             c.setFillColor(black)
-            c.setOpacity(0.3)
+            c.setFillAlpha(0.3)
             c.setFont(overlay.font_name, overlay.font_size)
             c.drawString(x + 2, y - 2, overlay.text)
 
         # Main text
         color = HexColor(f"#{overlay.color[0]:02x}{overlay.color[1]:02x}{overlay.color[2]:02x}")
         c.setFillColor(color)
-        c.setOpacity(1.0)
+        c.setFillAlpha(1.0)
         c.setFont(overlay.font_name, overlay.font_size)
 
         if overlay.align == "center":
@@ -525,8 +524,9 @@ class PDFBuilder:
         Center-crop image to target dimensions.
         Scales first to ensure full coverage, then crops from center.
         """
-        target_width = int(target_width_in * self.COLOR_QUALITY_DPI / inch)
-        target_height = int(target_height_in * self.COLOR_QUALITY_DPI / inch)
+        # Convert inches to pixels (DPI is already pixels per inch)
+        target_width = int(target_width_in * self.COLOR_QUALITY_DPI)
+        target_height = int(target_height_in * self.COLOR_QUALITY_DPI)
 
         # Calculate aspect ratios
         img_aspect = img.width / img.height

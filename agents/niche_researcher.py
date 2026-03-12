@@ -379,11 +379,19 @@ class NicheResearcher:
                     s["value"] for s in data["suggestions"][:5]
                 ]
 
-            return suggestions if suggestions else self._get_keyword_suggestions(keyword)
+            if suggestions:
+                return suggestions
+            # Fall back to generated suggestions
+            animals = ["fox", "bear", "rabbit", "cat", "dog", "dinosaur"]
+            themes = ["adventure", "bedtime", "friendship", "emotions", "learning"]
+            return [f"{keyword} {animal}" for animal in animals[:3]] + [f"{keyword} {theme}" for theme in themes[:3]]
 
         except Exception as e:
             logger.warning(f"Failed to fetch suggestions for '{keyword}': {e}")
-            return self._get_keyword_suggestions(keyword)
+            # Return fallback suggestions instead of recursing
+            animals = ["fox", "bear", "rabbit", "cat", "dog", "dinosaur"]
+            themes = ["adventure", "bedtime", "friendship", "emotions", "learning"]
+            return [f"{keyword} {animal}" for animal in animals[:3]] + [f"{keyword} {theme}" for theme in themes[:3]]
 
     def score_niches(
         self, category_data: Dict[str, List[Dict]]

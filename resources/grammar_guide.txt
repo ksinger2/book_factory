@@ -1,0 +1,30 @@
+CHILDREN'S BOOK GRAMMAR QUICK REFERENCE
+
+CAPITALIZATION RULES:
+- First word of every sentence: Capitalize
+- Character names (Priscilla, Oliver, Penny): Capitalize
+- Place names (Antarctica, The Big Lake, Snowy Mountain): Capitalize
+- Common nouns (penguin, snow, fish, water): lowercase
+- Adjectives (happy, cold, bright, fluffy): lowercase
+- Verbs (waddles, swims, plays, jumps): lowercase
+- Articles (the, a, an): lowercase (unless starting sentence)
+
+PUNCTUATION RULES:
+- Period (.): End of statement - use ONE only
+- Exclamation (!): End of excited statement - use sparingly, ONE only
+- Question (?): End of question - use ONE only
+- Comma (,): Pause within sentence
+- NEVER combine punctuation marks: No "!?" or ".." or ",," or "!!"
+
+COMMON ERRORS TO AVOID:
+- "The Happy Penguin Waddles Home" → "The happy penguin waddles home"
+- "She swam.. very fast" → "She swam very fast."
+- "What a day!!" → "What a day!"
+- "In The Cold Snow" → "In the cold snow"
+- "He Was So Very Happy" → "He was so very happy"
+
+RHYMING QUALITY:
+- True rhymes: cat/hat, day/play, night/bright
+- Avoid near-rhymes: love/move, again/rain
+- Keep consistent syllable count per line
+- Natural word order - don't force awkward phrasing for rhyme
