@@ -367,7 +367,9 @@ Keep descriptions concise but EXACT. Every detail you specify will be used to ma
         self,
         character_desc: str,
         output_path: Optional[Path] = None,
-        style: Optional[str] = None
+        style: Optional[str] = None,
+        guidance: Optional[str] = None,
+        guidance_reference: Optional[str] = None
     ) -> Tuple[str, Path]:
         """
         Generate a character reference sheet with multiple poses and expressions.
@@ -404,18 +406,27 @@ Keep descriptions concise but EXACT. Every detail you specify will be used to ma
         # Add the character description
         character_dna += f"\n{character_desc}\n"
 
+        # Build guidance section if provided
+        guidance_section = ""
+        if guidance:
+            guidance_section = f"""
+STYLE REFINEMENTS (Apply these adjustments to the character):
+{guidance.strip()}
+"""
+            logger.info(f"Applying regeneration guidance: {guidance[:100]}...")
+
         # DEBUG: Log what's being used
         logger.info(f"Character sheet generation - Reference features present: {bool(self.reference_features)}")
         if self.reference_features:
             logger.info(f"Reference features: {self.reference_features[:300]}...")
 
-        # Build prompt following optimal order: Style → Character → Layout → Constraints
+        # Build prompt following optimal order: Style → Character → Guidance → Layout → Constraints
         prompt = f"""Children's book illustration character reference sheet.
 
 ART STYLE: {art_style}
 
 {character_dna}
-
+{guidance_section}
 LAYOUT: Create a 4-panel character reference sheet on a clean white background:
 - Top left: Full body frontal view with neutral expression
 - Top right: Side profile view showing face and hair details
@@ -441,13 +452,16 @@ CONSTRAINTS:
 
         logger.info(f"Generating character sheet: {character_desc[:50]}...")
 
+        # Use guidance_reference if provided, otherwise fall back to original reference
+        active_reference = guidance_reference or self.reference_image
+
         attempt = 0
         while attempt <= self.max_retries:
             try:
                 # Generate character sheet - use images.edit if reference image provided
-                if self.reference_image:
+                if active_reference:
                     logger.info("Using images.edit with reference image for character sheet")
-                    ref_path = self._prepare_reference_image_for_edit(self.reference_image)
+                    ref_path = self._prepare_reference_image_for_edit(active_reference)
                     # Prepend reference image instruction following best practices
                     ref_prompt = f"""REFERENCE IMAGE: The person in the attached image is the basis for this character.
 Preserve their EXACT features in the illustrated character:

@@ -32,6 +32,8 @@
   .nav-item .dot { width:22px; height:22px; border-radius:50%; border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:600; flex-shrink:0; }
   .nav-item.done .dot { background:var(--green); color:var(--bg); border-color:var(--green); }
   .nav-item.active .dot { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .nav-item.disabled { opacity:0.4; cursor:not-allowed; }
+  .nav-item.disabled:hover { background:transparent; color:var(--dim); }
 
   .step { display:none; animation: fadeIn 0.15s; }
   .step.active { display:block; }
@@ -157,6 +159,14 @@
   .alert-warn { background:var(--yellow-bg); border:1px solid rgba(251,191,36,0.2); color:var(--yellow); }
   .alert-ok { background:var(--green-bg); border:1px solid rgba(52,211,153,0.2); color:var(--green); }
 
+  /* Toggle switch */
+  .toggle-switch { position:relative; display:inline-block; width:44px; height:24px; }
+  .toggle-switch input { opacity:0; width:0; height:0; }
+  .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--surface2); border:1px solid var(--border); transition:0.2s; border-radius:24px; }
+  .toggle-slider:before { position:absolute; content:""; height:18px; width:18px; left:2px; bottom:2px; background:var(--dim); transition:0.2s; border-radius:50%; }
+  .toggle-switch input:checked + .toggle-slider { background:var(--accent); border-color:var(--accent); }
+  .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); background:#fff; }
+
   @media (max-width:768px) { .sidebar{display:none} .main{margin-left:0;padding:20px;} .row,.row3{grid-template-columns:1fr;} }
 </style>
 </head>
@@ -178,6 +188,7 @@ const S = {
   config: { authorName:'Starlit Stories Press', publisher:'Starlit Stories Press' },
   book: {
     category:'', ageRange:'3-6', theme:'', animal:'', lesson:'', setting:'', tone:'whimsical', notes:'',
+    rhyming: true,  // Whether the story should be written in rhyming verse
     referenceImage: null, referenceImagePreview: '',
     artStyle:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations.',
     trimSize:'8.5x8.5', formats:['paperback','ebook'], pricePaperback:'9.99', priceEbook:'4.99'
@@ -185,12 +196,63 @@ const S = {
   research: { results:[], selected:null, loading:false },
   gen: {
     bookId:null, story:null, artProgress:null,
-    stages:{research:'pending',story:'pending',art:'pending',pdf:'pending',publish:'pending'},
+    characterSheet: null,       // Path to character sheet image
+    charsheetApproved: false,   // Whether character sheet is approved
+    stages:{research:'pending',story:'pending',charsheet:'pending',illustrations:'pending',pdf:'pending',publish:'pending'},
     log:[],
     generatedImages: [],  // [{type:'cover'|'spread'|'character_sheet', index:1, path:'scene_01.png'}]
-    editingScene: null    // Index of scene being edited, or null
-  }
+    editingScene: null,   // Index of scene being edited, or null
+    charsheetGuidance: '',           // User guidance text for regeneration
+    charsheetRegenReference: null,   // Base64 reference image for regeneration
+    charsheetRegenReferencePreview: ''  // Preview URL for regeneration reference
+  },
+  // Coloring book state
+  coloring: {
+    brief: {
+      title: '', theme: '', themeCustom: '', ageLevel: 'adult', difficulty: 'medium',
+      numPages: 24, bookSize: '8.5x8.5', referenceImage: null, notes: '', style: 'bold-easy'
+    },
+    bookId: null,
+    referenceSheet: null,
+    referenceApproved: false,
+    concepts: [],
+    pages: [],  // [{num, path, qaStatus:'pending'|'passed'|'failed', qaIssues:[]}]
+    cover: null,
+    backCover: null,
+    stages: {brief:'pending', reference:'pending', pages:'pending', cover:'pending', pdf:'pending', publish:'pending'},
+    progress: null,
+    log: [],
+    regenerating: {}  // {pageNum: true} to track which pages are regenerating
+  },
+  // Track regenerating images globally
+  regenerating: {}  // {'spread_1': true, 'cover': true, etc.}
 };
+
+// Coloring book theme options
+const COLORING_THEMES = [
+  {name: 'Mandalas & Patterns', desc: 'Intricate circular designs'},
+  {name: 'Animals & Pets', desc: 'Cats, dogs, wildlife'},
+  {name: 'Nature & Botanicals', desc: 'Flowers, plants, gardens'},
+  {name: 'Fantasy & Mythology', desc: 'Dragons, fairies, magic'},
+  {name: 'Aquatic & Ocean', desc: 'Fish, sea creatures, underwater'},
+  {name: 'Birds & Insects', desc: 'Butterflies, birds, bugs'},
+  {name: 'Architecture & Cities', desc: 'Buildings, cityscapes'},
+  {name: 'Food & Desserts', desc: 'Cakes, fruits, treats'},
+  {name: 'Holidays & Seasons', desc: 'Christmas, Halloween, etc'},
+  {name: 'Inspirational Quotes', desc: 'Typography with designs'},
+  {name: 'Custom', desc: 'Enter your own theme'}
+];
+
+// Coloring book steps
+const COLORING_STEPS = [
+  {id:'setup',name:'Setup',icon:'1'},
+  {id:'brief',name:'Brief',icon:'2'},
+  {id:'reference',name:'Style Sheet',icon:'3'},
+  {id:'pages',name:'Generate Pages',icon:'4'},
+  {id:'cover',name:'Cover',icon:'5'},
+  {id:'format',name:'Format & Price',icon:'6'},
+  {id:'publish',name:'Publish',icon:'7'}
+];
 
 const STEPS = [
   {id:'setup',name:'Setup',icon:'1'},
@@ -236,21 +298,38 @@ async function checkStatus() {
 
 // ─── Render ───
 function render() {
-  document.getElementById('nav').innerHTML = STEPS.map((s,i) => {
-    const cls = i===S.step?'active':i<S.step?'done':'';
-    return `<div class="nav-item ${cls}" onclick="go(${i})"><div class="dot">${i<S.step?'✓':s.icon}</div>${s.name}</div>`;
+  const steps = S.mode === 'coloring' ? COLORING_STEPS : STEPS;
+  document.getElementById('nav').innerHTML = steps.map((s,i) => {
+    // Block steps 3 (Generate Pages) and 4 (Cover) in coloring mode if reference not approved
+    const isBlocked = S.mode === 'coloring' && (i === 3 || i === 4) && !S.coloring.referenceApproved;
+    const cls = i===S.step?'active':i<S.step?'done':isBlocked?'disabled':'';
+    return `<div class="nav-item ${cls}" onclick="go(${i})" ${isBlocked?'title="Approve reference sheet first"':''}><div class="dot">${i<S.step?'✓':s.icon}</div>${s.name}</div>`;
   }).join('');
-  const views = [vSetup,vResearch,vBrief,vStyle,vFormat,vGenerate,vOutput];
+
+  let views;
+  if (S.mode === 'coloring') {
+    views = [vSetup, vColoringBrief, vColoringReference, vColoringPages, vColoringCover, vColoringFormat, vColoringPublish];
+  } else {
+    views = [vSetup, vResearch, vBrief, vStyle, vFormat, vGenerate, vOutput];
+  }
   document.getElementById('content').innerHTML = views[S.step]();
   bind();
 }
 
-function go(n) { S.step=n; render(); window.scrollTo(0,0); }
+function go(n) {
+  // Block coloring page/cover generation steps without reference approval
+  if (S.mode === 'coloring' && (n === 3 || n === 4) && !S.coloring.referenceApproved) {
+    alert('Please approve the reference sheet first. All image generation is blocked until you approve the style.');
+    return;
+  }
+  S.step=n; render(); window.scrollTo(0,0);
+}
 function v(id) { const el=document.getElementById(id); return el?el.value:''; }
 
 // ─── Mode selector ───
 function setMode(mode) {
   S.mode = mode;
+  S.step = 0;  // Reset to first step when switching modes
   render();
 }
 
@@ -267,23 +346,10 @@ function vSetup() {
         <p>Illustrated picture book with story</p>
       </div>
       <div class="mode-tab ${S.mode==='coloring'?'active':''}" onclick="setMode('coloring')">
-        <h4>Coloring Book<span class="coming-soon">Coming Soon</span></h4>
+        <h4>Coloring Book</h4>
         <p>Line art pages for coloring</p>
       </div>
     </div>`;
-
-  // Coloring book placeholder
-  if (S.mode === 'coloring') {
-    return `<div class="step active">
-      ${modeSelector}
-      <div class="card" style="text-align:center;padding:60px 40px;">
-        <div style="font-size:48px;margin-bottom:16px;">🎨</div>
-        <h2 style="margin-bottom:8px;">Coloring Book Mode</h2>
-        <p style="color:var(--dim);margin-bottom:24px;">This feature is coming soon! Generate line art coloring pages for children.</p>
-        <button class="btn btn-secondary" onclick="setMode('childrens')">← Back to Children's Books</button>
-      </div>
-    </div>`;
-  }
 
   return `<div class="step active">
     ${modeSelector}
@@ -437,7 +503,7 @@ function loadSample() {
 function vBrief() {
   return `<div class="step active">
     <h2>Book Brief</h2>
-    <p class="sub">What's this book about? The AI uses these inputs to write a 12-scene rhyming picture book.</p>
+    <p class="sub">What's this book about? The AI uses these inputs to write a 12-scene ${S.book.rhyming ? 'rhyming' : 'prose'} picture book.</p>
     <div class="card">
       <div class="row">
         <div class="field"><label>Category</label><input id="category" value="${S.book.category}" placeholder="e.g. Children's Fox Books"/></div>
@@ -461,6 +527,19 @@ function vBrief() {
           <option ${S.book.tone==='humorous'?'selected':''} value="humorous">Humorous</option>
           <option ${S.book.tone==='heartfelt'?'selected':''} value="heartfelt">Heartfelt</option>
         </select></div>
+        <div class="field">
+          <label>Writing Style</label>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
+            <label class="toggle-switch">
+              <input type="checkbox" id="rhyming" ${S.book.rhyming ? 'checked' : ''} onchange="saveFieldsBeforeToggle();S.book.rhyming=this.checked;render();">
+              <span class="toggle-slider"></span>
+            </label>
+            <span style="color:var(--text);font-size:14px;">${S.book.rhyming ? 'Rhyming Verse' : 'Regular Prose'}</span>
+          </div>
+          <div class="hint">${S.book.rhyming ? 'Story will be written with rhymes and rhythm' : 'Story will be written in regular narrative prose'}</div>
+        </div>
+      </div>
+      <div class="row">
         <div class="field"><label>Extra Notes (optional)</label><input id="notes" value="${S.book.notes||''}" placeholder="Character name, plot ideas, season..."/></div>
         <div class="field">
           <label>Reference Image (optional)</label>
@@ -503,10 +582,32 @@ function clearRefImage() {
   render();
 }
 
+// Save all brief fields before re-rendering (used by toggle switches)
+function saveFieldsBeforeToggle() {
+  const cat = document.getElementById('category');
+  const age = document.getElementById('ageRange');
+  const animal = document.getElementById('animal');
+  const lesson = document.getElementById('lesson');
+  const theme = document.getElementById('theme');
+  const setting = document.getElementById('setting');
+  const tone = document.getElementById('tone');
+  const notes = document.getElementById('notes');
+
+  if (cat) S.book.category = cat.value;
+  if (age) S.book.ageRange = age.value;
+  if (animal) S.book.animal = animal.value;
+  if (lesson) S.book.lesson = lesson.value;
+  if (theme) S.book.theme = theme.value;
+  if (setting) S.book.setting = setting.value;
+  if (tone) S.book.tone = tone.value;
+  if (notes) S.book.notes = notes.value;
+}
+
 function saveBrief() {
   S.book.category=v('category'); S.book.ageRange=v('ageRange'); S.book.animal=v('animal');
   S.book.lesson=v('lesson'); S.book.theme=v('theme'); S.book.setting=v('setting');
   S.book.tone=v('tone'); S.book.notes=v('notes');
+  S.book.rhyming=document.getElementById('rhyming')?.checked ?? true;
   go(3);
 }
 
@@ -611,8 +712,9 @@ function saveFmt() {
 // ─── Step 6: Generate ───
 function vGenerate() {
   const stages = [
-    {key:'story', name:'Generate Story', desc:'12 scenes, rhyming text, character design'},
-    {key:'art', name:'Create Illustrations', desc:'Character sheet + 14 images'},
+    {key:'story', name:'Generate Story', desc:'12 scenes, text, character design'},
+    {key:'charsheet', name:'Create Character Sheet', desc:'Reference for consistency'},
+    {key:'illustrations', name:'Create Illustrations', desc:'Cover + 12 scene images'},
     {key:'pdf', name:'Build PDFs', desc:'Interior, cover, Kindle cover'},
     {key:'publish', name:'Publish to KDP', desc:'Upload and list on Amazon'}
   ];
@@ -635,7 +737,15 @@ function vGenerate() {
       ${stages.map(s => {
         const st = S.gen.stages[s.key];
         const prog = S.gen.artProgress;
-        const showProgress = s.key === 'art' && st === 'running' && prog;
+        const showProgress = s.key === 'illustrations' && st === 'running' && prog;
+
+        // Determine if button should be disabled
+        let btnDisabled = false;
+        if (s.key === 'charsheet' && S.gen.stages.story !== 'done') btnDisabled = true;
+        if (s.key === 'illustrations' && !S.gen.charsheetApproved) btnDisabled = true;
+        if (s.key === 'pdf' && S.gen.stages.illustrations !== 'done') btnDisabled = true;
+        if (s.key === 'publish' && S.gen.stages.pdf !== 'done') btnDisabled = true;
+
         return `<div class="pipeline-stage ${st}">
           <div class="stage-icon">${st==='done'?'✓':st==='running'?'⟳':st==='error'?'✗':'○'}</div>
           <div class="stage-info" style="flex:1;">
@@ -653,7 +763,7 @@ function vGenerate() {
               </div>
             ` : ''}
           </div>
-          ${st==='pending'?`<button class="btn btn-secondary" onclick="runStage('${s.key}')" ${s.key!=='story'&&S.gen.stages.story==='pending'?'disabled':''}>Run</button>${s.key==='story'?'<button class="btn btn-ghost" onclick="loadDemoStory()" style="margin-left:6px;">[Sample]</button>':''}`:''}
+          ${st==='pending'?`<button class="btn btn-secondary" onclick="runStage('${s.key}')" ${btnDisabled?'disabled':''}>Run</button>${s.key==='story'?'<button class="btn btn-ghost" onclick="loadDemoStory()" style="margin-left:6px;">[Sample]</button>':''}`:''}
           ${st==='running'?`<span class="spinner"></span><button class="btn btn-ghost" onclick="cancelGeneration('${s.key}')" style="margin-left:8px;color:#ff6b6b;">✕ Cancel</button>`:''}
         </div>`;
       }).join('')}
@@ -663,7 +773,7 @@ function vGenerate() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <h3 style="margin:0;">Story Preview: ${S.gen.story.title||S.gen.story.story?.title||''}</h3>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-secondary" onclick="regenerateStory()">↻ Regenerate Story</button>
+          <button class="btn btn-secondary" onclick="regenerateStory()"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;font-size:16px;vertical-align:middle;">⟳</span>Regenerate Story</button>
         </div>
       </div>
       <div class="story-preview">
@@ -678,7 +788,7 @@ function vGenerate() {
             </div>
             ${S.gen.editingScene === i ? `
               <div class="scene-editor">
-                <textarea id="scene-text-${i}">${Array.isArray(sc.text) ? sc.text.join('\\n') : (sc.text||sc.content||'')}</textarea>
+                <textarea id="scene-text-${i}">${Array.isArray(sc.text) ? sc.text.join('\n') : (sc.text||sc.content||'')}</textarea>
                 <div class="scene-actions">
                   <button class="btn btn-ghost" onclick="cancelSceneEdit()">Cancel</button>
                   <button class="btn btn-primary" onclick="saveSceneText(${i})">Save</button>
@@ -694,17 +804,96 @@ function vGenerate() {
       </div>
     </div>` : ''}
 
+    ${S.gen.stages.story === 'done' ? `
+    <div class="card" style="${!S.gen.charsheetApproved ? 'border-color:var(--yellow);' : ''}">
+      <h3>Character Sheet ${S.gen.charsheetApproved ? '<span style="color:var(--green);font-size:14px;">✓ Approved</span>' : ''}</h3>
+
+      ${S.gen.characterSheet ? `
+        <div style="text-align:center;margin:16px 0;">
+          <img src="/api/files/${S.gen.bookId}/art/${S.gen.characterSheet}?t=${Date.now()}"
+               style="max-width:600px;width:100%;border-radius:8px;border:1px solid var(--border);"
+               onerror="this.style.display='none'"/>
+        </div>
+        ${!S.gen.charsheetApproved ? `
+          <div class="guidance-section" style="margin:16px auto;max-width:500px;padding:16px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+            <label style="font-size:12px;font-weight:500;color:var(--dim);display:block;margin-bottom:6px;">
+              Regeneration Guidance <span style="font-weight:normal;">(optional)</span>
+            </label>
+            <textarea id="charsheet-guidance"
+                      placeholder="Describe changes, e.g.: Make the eyes larger, use warmer skin tones, add freckles..."
+                      style="width:100%;min-height:60px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;"
+                      oninput="S.gen.charsheetGuidance = this.value">${S.gen.charsheetGuidance || ''}</textarea>
+
+            <div style="margin-top:10px;">
+              <label style="font-size:11px;color:var(--dim);display:block;margin-bottom:4px;">Additional reference image:</label>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <input type="file" id="regen-reference-input" accept="image/*"
+                       style="font-size:11px;" onchange="handleRegenReferenceUpload(event)"/>
+                ${S.gen.charsheetRegenReferencePreview ? `
+                  <div style="position:relative;">
+                    <img src="${S.gen.charsheetRegenReferencePreview}"
+                         style="width:50px;height:50px;object-fit:cover;border-radius:6px;border:1px solid var(--border);"/>
+                    <button onclick="clearRegenReference()"
+                            style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer;font-size:10px;">×</button>
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+            <button class="btn btn-green" onclick="approveCharSheet()">✓ Approve Character</button>
+            <button class="btn btn-secondary" onclick="regenerateCharSheet()">
+              <span style="margin-right:6px;">⟳</span>Regenerate
+            </button>
+          </div>
+          <p class="hint" style="text-align:center;margin-top:12px;">
+            Approve the character sheet to enable illustration generation
+          </p>
+        ` : `
+          <p class="hint" style="text-align:center;color:var(--green);">
+            Character approved! Illustrations will use this reference for consistency.
+          </p>
+        `}
+      ` : `
+        <div style="text-align:center;padding:20px;">
+          ${S.gen.stages.charsheet === 'running' ? `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+              <div class="spinner"></div>
+              <span style="color:var(--dim);">Generating character sheet...</span>
+            </div>
+          ` : `
+            <p style="color:var(--dim);margin-bottom:16px;">
+              Generate a character reference sheet for visual consistency across all illustrations.
+            </p>
+            <button class="btn btn-primary" onclick="runStage('charsheet')">
+              Generate Character Sheet
+            </button>
+          `}
+        </div>
+      `}
+    </div>
+    ` : ''}
+
     ${S.gen.generatedImages.length > 0 ? `<div class="card">
       <h3>Generated Images</h3>
       <p style="font-size:11px;color:var(--dim);margin-bottom:12px;">Click the regenerate button on any image to create a new version</p>
       <div class="gallery">
-        ${S.gen.generatedImages.map((img, i) => `
-          <div class="image-item">
+        ${S.gen.generatedImages.map((img, i) => {
+          const regenKey = img.type === 'spread' ? `spread_${img.index}` : img.type;
+          const isRegenerating = S.regenerating[regenKey];
+          return `
+          <div class="image-item" style="position:relative;">
             <span class="image-label">${img.type === 'spread' ? 'Scene '+img.index : img.type.replace('_',' ')}</span>
-            <img src="/api/files/${S.gen.bookId}/art/${img.path}?t=${img.timestamp||Date.now()}" alt="${img.type}" loading="lazy"/>
-            <button class="regen-btn" onclick="regenerateImage('${img.type}', ${img.index})">↻ Regen</button>
-          </div>
-        `).join('')}
+            <div style="position:relative;">
+              <img src="/api/files/${S.gen.bookId}/art/${img.path}?t=${img.timestamp||Date.now()}" alt="${img.type}" style="${isRegenerating ? 'opacity:0.3;filter:grayscale(100%);' : ''}"/>
+              ${isRegenerating ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div class="spinner"></div>
+                <span style="font-size:11px;color:var(--text);">Regenerating...</span>
+              </div>` : ''}
+            </div>
+            <button class="regen-btn" onclick="regenerateImage('${img.type}', ${img.index})" ${isRegenerating ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}><span style="margin-right:4px;">⟳</span>Regen</button>
+          </div>`;
+        }).join('')}
       </div>
     </div>` : ''}
 
@@ -721,7 +910,7 @@ function vGenerate() {
   </div>`;
 }
 
-async function runStage(stage) {
+async function runStage(stage, extraParams = {}) {
   S.gen.stages[stage] = 'running';
   S.gen.log.push(`[${new Date().toLocaleTimeString()}] Starting ${stage}...`);
   render();
@@ -733,6 +922,7 @@ async function runStage(stage) {
         animal: S.book.animal, theme: S.book.theme,
         lesson: S.book.lesson, setting: S.book.setting,
         tone: S.book.tone, notes: S.book.notes,
+        rhyming: S.book.rhyming,
         art_style: S.book.artStyle, trim_size: S.book.trimSize,
         formats: S.book.formats,
         reference_image: S.book.referenceImage
@@ -745,13 +935,67 @@ async function runStage(stage) {
         S.gen.log.push(`[${new Date().toLocaleTimeString()}] Story complete: ${r.book_id}`);
       } else throw new Error(r.error);
     }
-    else if (stage === 'art') {
-      if (!S.gen.bookId) { alert('Generate story first'); S.gen.stages.art='pending'; render(); return; }
+    else if (stage === 'charsheet') {
+      if (!S.gen.bookId) { alert('Generate story first'); S.gen.stages.charsheet='pending'; render(); return; }
 
-      // Use SSE for real-time progress with abort controller
+      // Use SSE for character sheet generation
+      const charsheetPayload = { book_id: S.gen.bookId, ...extraParams };
+      await new Promise((resolve, reject) => {
+        fetch('/api/charsheet', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(charsheetPayload)
+        }).then(response => {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+
+          function read() {
+            reader.read().then(({done, value}) => {
+              if (done) {
+                resolve();
+                return;
+              }
+
+              const text = decoder.decode(value);
+              const lines = text.split('\n');
+
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
+                    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ${data.message}`);
+
+                    if (data.stage === 'charsheet_done' && data.image_path) {
+                      S.gen.characterSheet = data.image_path;
+                      S.gen.stages.charsheet = 'done';
+                      S.gen.log.push(`[${new Date().toLocaleTimeString()}] Character sheet ready for approval`);
+                    }
+
+                    if (data.stage === 'charsheet_error') {
+                      S.gen.stages.charsheet = 'error';
+                      reject(new Error(data.message));
+                      return;
+                    }
+
+                    render();
+                  } catch(e) {}
+                }
+              }
+              read();
+            }).catch(reject);
+          }
+          read();
+        }).catch(reject);
+      });
+    }
+    else if (stage === 'illustrations') {
+      if (!S.gen.bookId) { alert('Generate story first'); S.gen.stages.illustrations='pending'; render(); return; }
+      if (!S.gen.charsheetApproved) { alert('Approve character sheet first'); S.gen.stages.illustrations='pending'; render(); return; }
+
+      // Use SSE for illustration generation with abort controller
       S.gen.artAbortController = new AbortController();
       await new Promise((resolve, reject) => {
-        fetch('/api/art', {
+        fetch('/api/illustrations', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ book_id: S.gen.bookId }),
@@ -763,8 +1007,8 @@ async function runStage(stage) {
           function read() {
             reader.read().then(({done, value}) => {
               if (done) {
-                S.gen.stages.art = 'done';
-                S.gen.log.push(`[${new Date().toLocaleTimeString()}] Art generation complete`);
+                S.gen.stages.illustrations = 'done';
+                S.gen.log.push(`[${new Date().toLocaleTimeString()}] All illustrations complete`);
                 resolve();
                 return;
               }
@@ -780,14 +1024,12 @@ async function runStage(stage) {
                     S.gen.log.push(`[${new Date().toLocaleTimeString()}] ${data.message}`);
 
                     // Track completed images for gallery display
-                    if (data.image_path && (data.stage.endsWith('_done') || data.stage === 'spread' || data.stage === 'cover' || data.stage === 'character_sheet')) {
-                      const imageType = data.stage.replace('_done', '');
-                      // Avoid duplicates
+                    if (data.image_path && data.stage === 'image_done') {
                       const exists = S.gen.generatedImages.some(img => img.path === data.image_path);
                       if (!exists) {
                         S.gen.generatedImages.push({
-                          type: imageType === 'spread' ? 'spread' : imageType,
-                          index: data.current || S.gen.generatedImages.length + 1,
+                          type: data.image_type || 'spread',
+                          index: data.index || data.current || S.gen.generatedImages.length + 1,
                           path: data.image_path,
                           timestamp: Date.now()
                         });
@@ -801,7 +1043,7 @@ async function runStage(stage) {
                       return;
                     }
                     if (data.stage === 'complete') {
-                      S.gen.stages.art = 'done';
+                      S.gen.stages.illustrations = 'done';
                       resolve();
                       return;
                     }
@@ -835,11 +1077,11 @@ async function runStage(stage) {
 }
 
 function cancelGeneration(stage) {
-  if (stage === 'art' && S.gen.artAbortController) {
+  if (stage === 'illustrations' && S.gen.artAbortController) {
     S.gen.artAbortController.abort();
-    S.gen.stages.art = 'pending';
+    S.gen.stages.illustrations = 'pending';
     S.gen.artProgress = null;
-    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Art generation CANCELLED by user`);
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Illustration generation CANCELLED by user`);
     // Also tell the server to stop
     fetch('/api/art/cancel', {
       method: 'POST',
@@ -847,8 +1089,11 @@ function cancelGeneration(stage) {
       body: JSON.stringify({ book_id: S.gen.bookId })
     }).catch(() => {});
     render();
+  } else if (stage === 'charsheet') {
+    S.gen.stages.charsheet = 'pending';
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Character sheet generation cancelled`);
+    render();
   } else if (stage === 'story') {
-    // Story generation is harder to cancel, just mark as pending
     S.gen.stages.story = 'pending';
     S.gen.log.push(`[${new Date().toLocaleTimeString()}] Story generation cancelled (will complete in background)`);
     render();
@@ -860,8 +1105,11 @@ async function regenerateStory() {
   // Reset story-related state but keep the book brief
   S.gen.story = null;
   S.gen.bookId = null;
+  S.gen.characterSheet = null;
+  S.gen.charsheetApproved = false;
   S.gen.stages.story = 'pending';
-  S.gen.stages.art = 'pending';
+  S.gen.stages.charsheet = 'pending';
+  S.gen.stages.illustrations = 'pending';
   S.gen.stages.pdf = 'pending';
   S.gen.stages.publish = 'pending';
   S.gen.generatedImages = [];
@@ -870,6 +1118,75 @@ async function regenerateStory() {
   render();
   // Auto-run story generation
   await runStage('story');
+}
+
+// ─── Character Sheet Approval ───
+async function approveCharSheet() {
+  if (!S.gen.bookId || !S.gen.characterSheet) {
+    alert('No character sheet to approve');
+    return;
+  }
+
+  const r = await api('/api/charsheet/approve', { book_id: S.gen.bookId });
+  if (r.ok) {
+    S.gen.charsheetApproved = true;
+    S.gen.stages.charsheet = 'done';
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Character sheet approved`);
+    render();
+    // Auto-start illustration generation
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] Starting illustration generation...`);
+    await runStage('illustrations');
+  } else {
+    alert(r.error || 'Failed to approve character sheet');
+  }
+}
+
+async function regenerateCharSheet() {
+  if (!S.gen.bookId) {
+    alert('No book to regenerate character sheet for');
+    return;
+  }
+
+  // Capture guidance before clearing
+  const guidance = S.gen.charsheetGuidance || '';
+  const guidanceRef = S.gen.charsheetRegenReference;
+
+  S.gen.charsheetApproved = false;
+  S.gen.characterSheet = null;
+  S.gen.stages.charsheet = 'pending';
+  S.gen.generatedImages = [];  // Clear illustrations since they depend on character sheet
+  S.gen.stages.illustrations = 'pending';
+  S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating character sheet${guidance ? ' with guidance' : ''}...`);
+
+  // Clear guidance after use
+  S.gen.charsheetGuidance = '';
+  S.gen.charsheetRegenReference = null;
+  S.gen.charsheetRegenReferencePreview = '';
+
+  render();
+  await runStage('charsheet', { guidance, guidance_reference_image: guidanceRef });
+}
+
+// ─── Regeneration Reference Image Handlers ───
+function handleRegenReferenceUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    S.gen.charsheetRegenReference = ev.target.result;
+    S.gen.charsheetRegenReferencePreview = ev.target.result;
+    render();
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearRegenReference() {
+  S.gen.charsheetRegenReference = null;
+  S.gen.charsheetRegenReferencePreview = '';
+  const input = document.getElementById('regen-reference-input');
+  if (input) input.value = '';
+  render();
 }
 
 // ─── Scene Text Editing ───
@@ -916,8 +1233,15 @@ async function saveSceneText(sceneIndex) {
 
 // ─── Image Regeneration ───
 async function regenerateImage(imageType, sceneIndex) {
+  const regenKey = imageType === 'spread' ? `spread_${sceneIndex}` : imageType;
+
+  // Prevent double-clicking while regenerating
+  if (S.regenerating[regenKey]) return;
+
   if (!confirm(`Regenerate the ${imageType === 'spread' ? 'Scene ' + sceneIndex : imageType.replace('_', ' ')} image?`)) return;
 
+  // Mark as regenerating
+  S.regenerating[regenKey] = true;
   S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${imageType}...`);
   render();
 
@@ -944,6 +1268,9 @@ async function regenerateImage(imageType, sceneIndex) {
     S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
     alert('Regeneration failed: ' + e.message);
   }
+
+  // Clear regenerating state
+  delete S.regenerating[regenKey];
   render();
 }
 
@@ -983,6 +1310,7 @@ async function loadDemoStory() {
             setting: brief.setting || S.book.setting,
             tone: brief.tone || S.book.tone,
             notes: brief.notes || S.book.notes,
+            rhyming: brief.rhyming !== undefined ? brief.rhyming : S.book.rhyming,
             artStyle: brief.art_style || S.book.artStyle,
             trimSize: brief.trim_size || S.book.trimSize
           };
@@ -1039,6 +1367,772 @@ function startNew() {
   S.gen = {bookId:null,story:null,artProgress:null,stages:{story:'pending',art:'pending',pdf:'pending',publish:'pending'},log:[],generatedImages:[],editingScene:null};
   S.research.selected = null;
   S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.setting=''; S.book.tone='whimsical'; S.book.notes='';
+  go(1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COLORING BOOK MODE VIEWS
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Coloring Step 2: Brief ───
+function vColoringBrief() {
+  const cb = S.coloring.brief;
+  const isCustomTheme = cb.theme === 'Custom';
+
+  return `<div class="step active">
+    <h2>Coloring Book Brief</h2>
+    <p class="sub">Configure your coloring book — theme, age level, difficulty, and number of pages.</p>
+
+    <div class="card">
+      <h3>Theme</h3>
+      <div class="field">
+        <label>Select Theme</label>
+        <select id="coloringTheme" onchange="updateColoringTheme()">
+          ${COLORING_THEMES.map(t => `<option value="${t.name}" ${cb.theme===t.name?'selected':''}>${t.name} — ${t.desc}</option>`).join('')}
+        </select>
+      </div>
+      ${isCustomTheme ? `
+      <div class="field">
+        <label>Custom Theme Description</label>
+        <input id="coloringThemeCustom" value="${cb.themeCustom}" placeholder="Describe your theme..."/>
+      </div>` : ''}
+      <div class="field">
+        <label>Title</label>
+        <div style="display:flex;gap:8px;">
+          <input id="coloringTitle" value="${cb.title}" placeholder="e.g., Magical Mandalas, Cute Animals" style="flex:1;"/>
+          <button class="btn btn-secondary" onclick="generateColoringTitle()" id="genTitleBtn" style="white-space:nowrap;">✨ Generate</button>
+        </div>
+        <div class="hint">This will appear on your cover. Click Generate for AI suggestions.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Art Style</h3>
+      <div class="field">
+        <label>Page Style</label>
+        <select id="coloringStyle">
+          <option value="zentangle" ${(cb.style||'')==='zentangle'?'selected':''}>Zentangle — Intricate repeating patterns, meditative</option>
+          <option value="mandala" ${(cb.style||'')==='mandala'?'selected':''}>Mandala — Circular symmetrical designs</option>
+          <option value="bold-easy" ${(cb.style||'bold-easy')==='bold-easy'?'selected':''}>Bold & Easy — Thick simple lines, great for beginners</option>
+          <option value="realistic" ${(cb.style||'')==='realistic'?'selected':''}>Realistic/Detailed — Fine detailed illustrations</option>
+          <option value="whimsical" ${(cb.style||'')==='whimsical'?'selected':''}>Whimsical/Cartoon — Playful, fun, lighthearted</option>
+          <option value="botanical" ${(cb.style||'')==='botanical'?'selected':''}>Botanical/Nature — Organic flowing lines, naturalistic</option>
+          <option value="geometric" ${(cb.style||'')==='geometric'?'selected':''}>Geometric/Abstract — Clean shapes and patterns</option>
+          <option value="kawaii" ${(cb.style||'')==='kawaii'?'selected':''}>Kawaii/Cute — Adorable Japanese-inspired style</option>
+          <option value="stained-glass" ${(cb.style||'')==='stained-glass'?'selected':''}>Stained Glass — Bold outlines with mosaic-like sections</option>
+          <option value="doodle" ${(cb.style||'')==='doodle'?'selected':''}>Doodle Art — Freeform, spontaneous, hand-drawn feel</option>
+        </select>
+        <div class="hint">This determines the overall artistic look of your coloring pages</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Audience & Difficulty</h3>
+      <div class="row">
+        <div class="field">
+          <label>Age Level</label>
+          <select id="coloringAgeLevel">
+            <option value="kid" ${cb.ageLevel==='kid'?'selected':''}>Kid (3-6) — Bold lines, simple shapes</option>
+            <option value="tween" ${cb.ageLevel==='tween'?'selected':''}>Tween (7-12) — Medium detail</option>
+            <option value="teen" ${cb.ageLevel==='teen'?'selected':''}>Teen (13-17) — Detailed designs</option>
+            <option value="ya" ${cb.ageLevel==='ya'?'selected':''}>Young Adult (18-25) — Artistic style</option>
+            <option value="adult" ${cb.ageLevel==='adult'?'selected':''}>Adult (26-55) — Intricate patterns</option>
+            <option value="elder" ${cb.ageLevel==='elder'?'selected':''}>Elder (55+) — Clear, relaxing</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Difficulty</label>
+          <select id="coloringDifficulty">
+            <option value="easy" ${cb.difficulty==='easy'?'selected':''}>Easy — 50% less detail</option>
+            <option value="medium" ${cb.difficulty==='medium'?'selected':''}>Medium — Standard</option>
+            <option value="hard" ${cb.difficulty==='hard'?'selected':''}>Hard — 50% more detail</option>
+            <option value="expert" ${cb.difficulty==='expert'?'selected':''}>Expert — Maximum intricacy</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Book Size</h3>
+      <div class="row">
+        <div class="field">
+          <label>Number of Pages</label>
+          <select id="coloringNumPages">
+            ${[12,16,24,32,48].map(n => `<option value="${n}" ${cb.numPages===n?'selected':''}>${n} pages</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Trim Size</label>
+          <select id="coloringBookSize">
+            <option value="8.5x8.5" ${cb.bookSize==='8.5x8.5'?'selected':''}>8.5 x 8.5 (Square)</option>
+            <option value="8x10" ${cb.bookSize==='8x10'?'selected':''}>8 x 10 (Portrait)</option>
+            <option value="6x9" ${cb.bookSize==='6x9'?'selected':''}>6 x 9 (Standard)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Additional Notes (Optional)</h3>
+      <div class="field">
+        <textarea id="coloringNotes" placeholder="Any specific instructions, style preferences, or elements to include/avoid...">${cb.notes}</textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(0)">← Setup</button>
+      <button class="btn btn-primary" onclick="saveColoringBrief()">Continue to Style Sheet →</button>
+    </div>
+  </div>`;
+}
+
+function updateColoringTheme() {
+  S.coloring.brief.theme = v('coloringTheme');
+  render();
+}
+
+async function generateColoringTitle() {
+  const theme = v('coloringTheme') === 'Custom' ? v('coloringThemeCustom') : v('coloringTheme');
+  if (!theme) {
+    alert('Please select a theme first');
+    return;
+  }
+
+  const btn = document.getElementById('genTitleBtn');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;"></span>';
+  btn.disabled = true;
+
+  try {
+    const r = await api('/api/coloring/generate-title', { theme });
+    if (r.ok && r.title) {
+      document.getElementById('coloringTitle').value = r.title;
+      S.coloring.brief.title = r.title;
+    } else {
+      alert('Failed to generate title');
+    }
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+
+  btn.innerHTML = originalText;
+  btn.disabled = false;
+}
+
+async function saveColoringBrief() {
+  const cb = S.coloring.brief;
+  cb.title = v('coloringTitle') || `${v('coloringTheme')} Coloring Book`;
+  cb.theme = v('coloringTheme');
+  cb.themeCustom = v('coloringThemeCustom') || '';
+  cb.ageLevel = v('coloringAgeLevel');
+  cb.difficulty = v('coloringDifficulty');
+  cb.numPages = parseInt(v('coloringNumPages'));
+  cb.bookSize = v('coloringBookSize');
+  cb.notes = v('coloringNotes');
+  cb.style = v('coloringStyle') || 'bold-easy';
+
+  // Use custom theme if selected
+  const effectiveTheme = cb.theme === 'Custom' ? cb.themeCustom : cb.theme;
+
+  try {
+    const r = await api('/api/coloring/brief', {
+      title: cb.title,
+      theme: effectiveTheme,
+      ageLevel: cb.ageLevel,
+      difficulty: cb.difficulty,
+      numPages: cb.numPages,
+      bookSize: cb.bookSize,
+      notes: cb.notes,
+      style: cb.style
+    });
+
+    if (r.ok) {
+      S.coloring.bookId = r.book_id;
+      S.coloring.stages.brief = 'done';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Brief saved: ${r.book_id}`);
+      go(2);
+    } else {
+      alert('Error: ' + (r.error || 'Unknown error'));
+    }
+  } catch(e) {
+    alert('Failed to save brief: ' + e.message);
+  }
+}
+
+// ─── Coloring Step 3: Reference Sheet ───
+function vColoringReference() {
+  const approved = S.coloring.referenceApproved;
+  const refSheet = S.coloring.referenceSheet;
+
+  return `<div class="step active">
+    <h2>Reference Style Sheet</h2>
+    <p class="sub">Generate a style sheet that defines the visual language for all pages. You must approve it before continuing.</p>
+
+    ${!S.coloring.bookId ? `
+    <div class="alert alert-warn">No brief saved. Go back and fill out the brief first.</div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(1)">← Back to Brief</button>
+    </div>
+    ` : `
+
+    <div class="card">
+      <h3>Style Sheet Preview</h3>
+      ${refSheet ? `
+        <div style="text-align:center;margin-bottom:16px;">
+          <img src="/api/files/${refSheet}?t=${Date.now()}" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"/>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          ${!approved ? `
+            <button class="btn btn-green" onclick="approveReference()">✓ Approve This Style</button>
+            <button class="btn btn-secondary" onclick="regenerateReference()"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;font-size:16px;">⟳</span>Regenerate</button>
+          ` : `
+            <div class="alert alert-ok" style="margin:0;">Style approved! Ready to generate pages.</div>
+          `}
+        </div>
+      ` : `
+        <div style="text-align:center;padding:40px;">
+          <p style="color:var(--dim);margin-bottom:16px;">Click below to generate your reference style sheet.</p>
+          <button class="btn btn-primary" onclick="generateReference()" ${S.coloring.stages.reference==='running'?'disabled':''}>
+            ${S.coloring.stages.reference==='running' ? '<span class="spinner"></span> Generating...' : 'Generate Style Sheet'}
+          </button>
+        </div>
+      `}
+    </div>
+
+    ${S.coloring.concepts.length > 0 ? `
+    <div class="card">
+      <h3>Page Concepts (${S.coloring.concepts.length} pages)</h3>
+      <div style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--dim);">
+        ${S.coloring.concepts.map((c,i) => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">${i+1}. ${c}</div>`).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="alert alert-info">
+      The reference sheet establishes line weight, complexity, and visual style for all pages in your coloring book.
+      Make sure you're happy with it before proceeding — all pages will match this style.
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(1)">← Brief</button>
+      <button class="btn btn-primary" onclick="go(3)" ${!approved?'disabled':''}>Continue to Generate Pages →</button>
+    </div>
+    `}
+  </div>`;
+}
+
+async function generateReference() {
+  if (!S.coloring.bookId) { alert('Save brief first'); return; }
+
+  S.coloring.stages.reference = 'running';
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating reference sheet...`);
+  render();
+
+  try {
+    const r = await api('/api/coloring/reference', { book_id: S.coloring.bookId });
+
+    if (r.ok) {
+      S.coloring.referenceSheet = r.reference_sheet;
+      S.coloring.concepts = r.concepts || [];
+      S.coloring.stages.reference = 'done';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Reference sheet generated`);
+    } else {
+      S.coloring.stages.reference = 'error';
+      alert('Error: ' + (r.error || 'Generation failed'));
+    }
+  } catch(e) {
+    S.coloring.stages.reference = 'error';
+    alert('Failed: ' + e.message);
+  }
+  render();
+}
+
+async function regenerateReference() {
+  S.coloring.referenceApproved = false;
+  S.coloring.referenceSheet = null;
+  await generateReference();
+}
+
+async function approveReference() {
+  try {
+    const r = await api('/api/coloring/reference/approve', { book_id: S.coloring.bookId });
+    if (r.ok) {
+      S.coloring.referenceApproved = true;
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Reference sheet approved`);
+    }
+  } catch(e) {
+    console.error(e);
+  }
+  render();
+}
+
+// ─── Coloring Step 4: Generate Pages ───
+function vColoringPages() {
+  const pages = S.coloring.pages;
+  const progress = S.coloring.progress;
+  const isRunning = S.coloring.stages.pages === 'running';
+
+  return `<div class="step active">
+    <h2>Generate Coloring Pages</h2>
+    <p class="sub">Generate all pages with automatic QA checking. Failed pages will be regenerated automatically.</p>
+
+    ${!S.coloring.referenceApproved ? `
+    <div class="alert alert-warn">Reference sheet not approved. Go back and approve it first.</div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(2)">← Back to Style Sheet</button>
+    </div>
+    ` : `
+
+    <div class="card">
+      <h3>Generation Progress</h3>
+      ${progress ? `
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dim);margin-bottom:4px;">
+            <span>${progress.message}</span>
+            <span>${progress.current} / ${progress.total}</span>
+          </div>
+          <div class="meter-track">
+            <div class="meter-fill demand" style="width:${Math.round((progress.current/progress.total)*100)}%"></div>
+          </div>
+        </div>
+      ` : ''}
+
+      <div style="display:flex;gap:10px;">
+        ${!isRunning && pages.length === 0 ? `
+          <button class="btn btn-primary" onclick="generateColoringPages()">Generate All Pages</button>
+        ` : ''}
+        ${isRunning ? `
+          <button class="btn btn-secondary" onclick="cancelColoringPages()">Cancel</button>
+        ` : ''}
+      </div>
+    </div>
+
+    ${pages.length > 0 ? `
+    <div class="card">
+      <h3>Generated Pages (${pages.filter(p=>p.qaStatus==='passed').length}/${pages.length} passed QA)</h3>
+      <p style="font-size:11px;color:var(--dim);margin-bottom:12px;">Review each page below. Click ⟳ to regenerate any page you're not satisfied with.</p>
+      <div class="gallery" style="grid-template-columns:repeat(3,1fr);gap:16px;">
+        ${pages.map(p => {
+          const isRegenerating = S.coloring.regenerating[p.num];
+          return `
+          <div class="image-item" style="position:relative;">
+            <span class="image-label" style="background:${isRegenerating?'var(--yellow)':p.qaStatus==='passed'?'var(--green)':p.qaStatus==='failed'?'var(--red)':'var(--yellow)'}">${isRegenerating?'Regenerating...':'Page '+p.num}</span>
+            <div style="position:relative;">
+              ${p.path ? `<img src="/api/files/${S.coloring.bookId}/${p.path}?t=${p.timestamp||Date.now()}" style="width:100%;border-radius:8px;border:2px solid var(--border);${isRegenerating?'opacity:0.3;filter:grayscale(100%);':''}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"/>
+              <div style="display:none;aspect-ratio:1;background:var(--surface2);border-radius:8px;align-items:center;justify-content:center;color:var(--dim);font-size:12px;">Failed to load</div>` : `
+              <div style="aspect-ratio:1;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                <div class="spinner"></div>
+              </div>`}
+              ${isRegenerating ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;">
+                <div class="spinner"></div>
+                <span style="font-size:11px;color:var(--text);background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;">Regenerating...</span>
+              </div>` : ''}
+            </div>
+            <button class="regen-btn" onclick="regenerateColoringPage(${p.num})" style="opacity:1;background:rgba(0,0,0,0.7);${isRegenerating?'cursor:not-allowed;opacity:0.5;':''}" ${isRegenerating?'disabled':''}><span style="margin-right:4px;">⟳</span>Regen</button>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    ${S.coloring.log.length ? `
+    <div class="card">
+      <h3>Log</h3>
+      <div style="font-family:monospace;font-size:11px;color:var(--dim);max-height:150px;overflow-y:auto;">
+        ${S.coloring.log.slice(-20).map(l=>`<div>${l}</div>`).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(2)">← Style Sheet</button>
+      <button class="btn btn-primary" onclick="go(4)" ${pages.length===0?'disabled':''}>Continue to Cover →</button>
+    </div>
+    `}
+  </div>`;
+}
+
+async function generateColoringPages() {
+  if (!S.coloring.bookId) return;
+
+  S.coloring.stages.pages = 'running';
+  S.coloring.pages = [];
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Starting page generation...`);
+  render();
+
+  try {
+    const response = await fetch('/api/coloring/pages', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ book_id: S.coloring.bookId })
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+
+      const text = decoder.decode(value);
+      const lines = text.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            S.coloring.progress = data;
+            S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ${data.message}`);
+
+            if (data.stage === 'page_done' || data.stage === 'page_failed') {
+              // Small delay to ensure file is fully written before render
+              setTimeout(() => {
+                S.coloring.pages.push({
+                  num: data.current,
+                  path: data.image_path,
+                  qaStatus: data.qa_passed ? 'passed' : 'failed'
+                });
+                render();
+              }, 300);
+            }
+
+            if (data.stage === 'complete') {
+              S.coloring.stages.pages = 'done';
+            }
+
+            if (data.stage === 'cancelled') {
+              S.coloring.stages.pages = 'pending';
+              S.coloring.progress = null;
+              S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Generation cancelled - no further pages will be generated`);
+            }
+
+            render();
+          } catch(e) {}
+        }
+      }
+    }
+  } catch(e) {
+    S.coloring.stages.pages = 'error';
+    S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
+  }
+  render();
+}
+
+async function cancelColoringPages() {
+  try {
+    const r = await api('/api/coloring/cancel', { book_id: S.coloring.bookId });
+    if (r.ok) {
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⏹️ Cancellation requested - stopping after current page completes...`);
+    } else {
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Cancel request failed: ${r.error}`);
+    }
+  } catch(e) {
+    console.error('Cancel failed:', e);
+    S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Cancel request failed: ${e.message}`);
+  }
+  S.coloring.stages.pages = 'pending';
+  S.coloring.progress = null;
+  render();
+}
+
+async function regenerateColoringPage(pageNum) {
+  // Prevent double-clicking while regenerating
+  if (S.coloring.regenerating[pageNum]) return;
+
+  // Mark as regenerating
+  S.coloring.regenerating[pageNum] = true;
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating page ${pageNum}...`);
+  render();
+
+  try {
+    const r = await api('/api/coloring/regenerate', {
+      book_id: S.coloring.bookId,
+      page_num: pageNum
+    });
+
+    if (r.ok) {
+      const idx = S.coloring.pages.findIndex(p => p.num === pageNum);
+      if (idx >= 0) {
+        S.coloring.pages[idx].path = r.image_path;
+        S.coloring.pages[idx].qaStatus = r.qa_passed ? 'passed' : 'failed';
+        S.coloring.pages[idx].timestamp = Date.now();  // Force cache refresh
+      }
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Page ${pageNum} regenerated successfully`);
+    } else {
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${r.error || 'Regeneration failed'}`);
+      alert('Error: ' + (r.error || 'Regeneration failed'));
+    }
+  } catch(e) {
+    S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
+    alert('Failed: ' + e.message);
+  }
+
+  // Clear regenerating state
+  delete S.coloring.regenerating[pageNum];
+  render();
+}
+
+// ─── Coloring Step 5: Cover ───
+function vColoringCover() {
+  // Block cover generation if reference not approved
+  if (!S.coloring.referenceApproved) {
+    return `<div class="step active">
+      <h2>Cover Design</h2>
+      <p class="sub">Generate a compelling colored cover for your coloring book.</p>
+      <div class="alert alert-warn">Reference sheet not approved. You must approve the style sheet before generating covers.</div>
+      <div class="actions">
+        <button class="btn btn-ghost" onclick="go(2)">← Back to Style Sheet</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="step active">
+    <h2>Cover Design</h2>
+    <p class="sub">Generate a compelling colored cover for your coloring book.</p>
+
+    <div class="card">
+      <h3>Cover Preview</h3>
+      <div class="row">
+        <div style="text-align:center;">
+          <p style="font-size:12px;color:var(--dim);margin-bottom:8px;">Front Cover</p>
+          ${S.coloring.cover ? `
+            <img src="/api/files/${S.coloring.cover}?t=${Date.now()}" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border);"/>
+            <button class="btn btn-secondary" style="margin-top:8px;" onclick="regenerateColoringCover('front')"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;font-size:16px;">⟳</span>Regenerate</button>
+          ` : `
+            <div style="height:200px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dim);">
+              Not generated yet
+            </div>
+          `}
+        </div>
+        <div style="text-align:center;">
+          <p style="font-size:12px;color:var(--dim);margin-bottom:8px;">Back Cover</p>
+          ${S.coloring.backCover ? `
+            <img src="/api/files/${S.coloring.backCover}?t=${Date.now()}" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border);"/>
+            <button class="btn btn-secondary" style="margin-top:8px;" onclick="regenerateColoringCover('back')"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;font-size:16px;">⟳</span>Regenerate</button>
+          ` : `
+            <div style="height:200px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dim);">
+              Not generated yet
+            </div>
+          `}
+        </div>
+      </div>
+
+      ${!S.coloring.cover ? `
+      <div style="text-align:center;margin-top:16px;">
+        <button class="btn btn-primary" onclick="generateColoringCovers()" ${S.coloring.stages.cover==='running'?'disabled':''}>
+          ${S.coloring.stages.cover==='running' ? '<span class="spinner"></span> Generating...' : 'Generate Covers'}
+        </button>
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(3)">← Pages</button>
+      <button class="btn btn-primary" onclick="go(5)" ${!S.coloring.cover?'disabled':''}>Continue to Format →</button>
+    </div>
+  </div>`;
+}
+
+async function generateColoringCovers() {
+  if (!S.coloring.bookId) return;
+
+  S.coloring.stages.cover = 'running';
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating covers...`);
+  render();
+
+  try {
+    const r = await api('/api/coloring/cover', { book_id: S.coloring.bookId });
+
+    if (r.ok) {
+      S.coloring.cover = r.cover;
+      S.coloring.backCover = r.back_cover;
+      S.coloring.stages.cover = 'done';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Covers generated`);
+    } else {
+      S.coloring.stages.cover = 'error';
+      alert('Error: ' + (r.error || 'Generation failed'));
+    }
+  } catch(e) {
+    S.coloring.stages.cover = 'error';
+    alert('Failed: ' + e.message);
+  }
+  render();
+}
+
+async function regenerateColoringCover(type) {
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${type} cover...`);
+  await generateColoringCovers();
+}
+
+// ─── Coloring Step 6: Format & Price ───
+function vColoringFormat() {
+  const cb = S.coloring.brief;
+  return `<div class="step active">
+    <h2>Format & Pricing</h2>
+    <p class="sub">Configure pricing and build your KDP-ready files.</p>
+
+    <div class="card">
+      <h3>Book Details</h3>
+      <div style="font-size:13px;color:var(--dim);line-height:1.8;">
+        <strong style="color:var(--text);">${cb.title || 'Coloring Book'}</strong><br/>
+        Theme: ${cb.theme} · ${cb.numPages} pages · ${cb.bookSize}<br/>
+        Audience: ${cb.ageLevel} · Difficulty: ${cb.difficulty}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Pricing</h3>
+      <div class="row3">
+        <div class="field">
+          <label>Paperback ($)</label>
+          <input type="number" id="coloringPricePb" value="${S.book.pricePaperback}" step="0.01"/>
+          <div class="hint">Royalty: ~$${(parseFloat(S.book.pricePaperback)*0.6 - 2.15).toFixed(2)}</div>
+        </div>
+        <div class="field">
+          <label>eBook ($)</label>
+          <input type="number" id="coloringPriceEb" value="${S.book.priceEbook}" step="0.01" max="9.99"/>
+          <div class="hint">Royalty: ~$${(parseFloat(S.book.priceEbook)*0.7*0.99).toFixed(2)}</div>
+        </div>
+        <div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Build PDFs</h3>
+      <p style="font-size:12px;color:var(--dim);margin-bottom:12px;">Generate KDP-ready interior and cover PDFs.</p>
+      <button class="btn btn-primary" onclick="buildColoringPDFs()" ${S.coloring.stages.pdf==='running'?'disabled':''}>
+        ${S.coloring.stages.pdf==='running' ? '<span class="spinner"></span> Building...' : S.coloring.stages.pdf==='done' ? '✓ PDFs Built — Rebuild' : 'Build PDFs'}
+      </button>
+      ${S.coloring.stages.pdf==='done' ? `
+      <div style="margin-top:12px;display:flex;gap:8px;">
+        <a href="/api/files/${S.coloring.bookId}/Interior.pdf" class="btn btn-secondary" download>Download Interior</a>
+        <a href="/api/files/${S.coloring.bookId}/Cover.pdf" class="btn btn-secondary" download>Download Cover</a>
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(4)">← Cover</button>
+      <button class="btn btn-primary" onclick="go(6)" ${S.coloring.stages.pdf!=='done'?'disabled':''}>Continue to Publish →</button>
+    </div>
+  </div>`;
+}
+
+async function buildColoringPDFs() {
+  if (!S.coloring.bookId) return;
+
+  S.coloring.stages.pdf = 'running';
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Building PDFs...`);
+  render();
+
+  try {
+    const r = await api('/api/coloring/pdf', { book_id: S.coloring.bookId });
+
+    if (r.ok) {
+      S.coloring.stages.pdf = 'done';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] PDFs built successfully`);
+    } else {
+      S.coloring.stages.pdf = 'error';
+      alert('Error: ' + (r.error || 'Build failed'));
+    }
+  } catch(e) {
+    S.coloring.stages.pdf = 'error';
+    alert('Failed: ' + e.message);
+  }
+  render();
+}
+
+// ─── Coloring Step 7: Publish ───
+function vColoringPublish() {
+  return `<div class="step active">
+    <h2>Publish to KDP</h2>
+    <p class="sub">Upload your coloring book to Amazon Kindle Direct Publishing.</p>
+
+    ${S.coloring.stages.pdf !== 'done' ? `
+    <div class="alert alert-warn">PDFs not built yet. Go back and build them first.</div>
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(5)">← Back to Format</button>
+    </div>
+    ` : `
+
+    <div class="card">
+      <h3>Ready to Publish</h3>
+      <div style="font-size:13px;color:var(--dim);line-height:1.8;margin-bottom:16px;">
+        <strong style="color:var(--text);">${S.coloring.brief.title || 'Coloring Book'}</strong><br/>
+        Book ID: ${S.coloring.bookId}<br/>
+        Files: Interior.pdf, Cover.pdf, Kindle_Cover.jpg
+      </div>
+
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        <strong>Before publishing:</strong> Make sure Chrome is closed. The publisher will use your Chrome profile to log into KDP.
+      </div>
+
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-primary" onclick="publishColoringBook(false)" ${S.coloring.stages.publish==='running'?'disabled':''}>
+          ${S.coloring.stages.publish==='running' ? '<span class="spinner"></span> Publishing...' : 'Publish to KDP'}
+        </button>
+        <button class="btn btn-secondary" onclick="publishColoringBook(true)">Dry Run (Test)</button>
+      </div>
+
+      ${S.coloring.stages.publish==='done' ? `
+      <div class="alert alert-ok" style="margin-top:16px;">
+        Published successfully! Check your KDP dashboard for the listing.
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="card">
+      <h3>Downloads</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <a href="/api/files/${S.coloring.bookId}/Interior.pdf" class="btn btn-secondary" download>Interior PDF</a>
+        <a href="/api/files/${S.coloring.bookId}/Cover.pdf" class="btn btn-secondary" download>Cover PDF</a>
+        <a href="/api/files/${S.coloring.bookId}/Kindle_Cover.jpg" class="btn btn-secondary" download>Kindle Cover</a>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="go(5)">← Format</button>
+      <button class="btn btn-green" onclick="startNewColoringBook()">New Coloring Book</button>
+    </div>
+    `}
+  </div>`;
+}
+
+async function publishColoringBook(dryRun) {
+  if (!S.coloring.bookId) return;
+
+  S.coloring.stages.publish = 'running';
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ${dryRun ? 'Dry run' : 'Publishing'}...`);
+  render();
+
+  try {
+    const r = await api('/api/coloring/publish', {
+      book_id: S.coloring.bookId,
+      dry_run: dryRun
+    });
+
+    if (r.ok) {
+      S.coloring.stages.publish = 'done';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ${dryRun ? 'Dry run complete' : 'Published!'}`);
+    } else {
+      S.coloring.stages.publish = 'error';
+      alert('Error: ' + (r.error || 'Publish failed'));
+    }
+  } catch(e) {
+    S.coloring.stages.publish = 'error';
+    alert('Failed: ' + e.message);
+  }
+  render();
+}
+
+function startNewColoringBook() {
+  S.coloring = {
+    brief: { title: '', theme: '', themeCustom: '', ageLevel: 'adult', difficulty: 'medium', numPages: 24, bookSize: '8.5x8.5', referenceImage: null, notes: '' },
+    bookId: null, referenceSheet: null, referenceApproved: false, concepts: [], pages: [],
+    cover: null, backCover: null,
+    stages: {brief:'pending', reference:'pending', pages:'pending', cover:'pending', pdf:'pending', publish:'pending'},
+    progress: null, log: []
+  };
   go(1);
 }
 
