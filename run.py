@@ -336,7 +336,7 @@ def api_art():
                     style=art_style_for_pipeline
                 )
                 results["character_sheet"] = str(char_path)
-                yield f"data: {json.dumps({'stage': 'character_sheet_done', 'current': current, 'total': total_images, 'message': 'Character sheet complete!'})}\n\n"
+                yield f"data: {json.dumps({'stage': 'character_sheet_done', 'current': current, 'total': total_images, 'message': 'Character sheet complete!', 'image_path': f'character_sheets/{art_package[\"character_name\"]}_sheet.png'})}\n\n"
             except Exception as e:
                 results["failed_images"].append(f"character_sheet: {str(e)}")
                 yield f"data: {json.dumps({'stage': 'character_sheet_error', 'current': current, 'total': total_images, 'message': f'Character sheet failed: {str(e)}'})}\n\n"
@@ -357,7 +357,7 @@ def api_art():
                         style=art_style_for_pipeline
                     )
                     results["cover"] = str(cpath)
-                    yield f"data: {json.dumps({'stage': 'cover_done', 'current': current, 'total': total_images, 'message': 'Cover complete!'})}\n\n"
+                    yield f"data: {json.dumps({'stage': 'cover_done', 'current': current, 'total': total_images, 'message': 'Cover complete!', 'image_path': 'cover.png'})}\n\n"
                 except Exception as e:
                     results["failed_images"].append(f"cover: {str(e)}")
                     yield f"data: {json.dumps({'stage': 'cover_error', 'current': current, 'total': total_images, 'message': f'Cover failed: {str(e)}'})}\n\n"
@@ -412,7 +412,7 @@ Page Text (the verse for this illustration):
                             style=art_style_for_pipeline
                         )
                         results["spreads"].append(str(spath))
-                        yield f"data: {json.dumps({'stage': 'spread_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!'})}\n\n"
+                        yield f"data: {json.dumps({'stage': 'spread_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!', 'image_path': f'scene_{i+1:02d}.png'})}\n\n"
                     except Exception as e:
                         results["failed_images"].append(f"spread_{i+1}: {str(e)}")
                         yield f"data: {json.dumps({'stage': 'spread_error', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} failed: {str(e)}'})}\n\n"
@@ -431,6 +431,172 @@ Page Text (the verse for this illustration):
             yield f"data: {json.dumps({'stage': 'error', 'message': str(e)})}\n\n"
 
     return Response(generate_with_progress(), mimetype='text/event-stream')
+
+
+@app.route('/api/story/update', methods=['POST'])
+def api_story_update():
+    """Update story scene text."""
+    try:
+        data = request.json
+        book_id = data.get("book_id")
+        scene_index = data.get("scene_index")  # 0-based
+        new_text = data.get("text")  # Array of lines
+
+        if not book_id:
+            return jsonify({"ok": False, "error": "No book_id provided"}), 400
+        if scene_index is None:
+            return jsonify({"ok": False, "error": "No scene_index provided"}), 400
+
+        book_dir = OUTPUT_DIR / book_id
+        story_path = book_dir / "story_package.json"
+
+        if not story_path.exists():
+            return jsonify({"ok": False, "error": "Story not found"}), 404
+
+        with open(story_path) as f:
+            story_data = json.load(f)
+
+        # Update the scene text
+        story = story_data.get('story', story_data)
+        scenes = story.get('scenes', [])
+
+        if scene_index < 0 or scene_index >= len(scenes):
+            return jsonify({"ok": False, "error": "Invalid scene index"}), 400
+
+        scenes[scene_index]['text'] = new_text
+
+        # Save back to file
+        with open(story_path, 'w') as f:
+            json.dump(story_data, f, indent=2, default=str)
+
+        log.info(f"Updated scene {scene_index + 1} text for {book_id}")
+        return jsonify({"ok": True, "message": "Scene updated"})
+
+    except Exception as e:
+        log.exception("Story update failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route('/api/regenerate-image', methods=['POST'])
+def api_regenerate_image():
+    """Regenerate a single image."""
+    try:
+        from agents.art_pipeline import ArtPipeline
+
+        data = request.json
+        book_id = data.get("book_id")
+        image_type = data.get("image_type")  # 'spread', 'cover', 'character_sheet'
+        scene_index = data.get("scene_index", 1)  # 1-based
+
+        if not book_id:
+            return jsonify({"ok": False, "error": "No book_id provided"}), 400
+        if not image_type:
+            return jsonify({"ok": False, "error": "No image_type provided"}), 400
+
+        book_dir = OUTPUT_DIR / book_id
+        art_dir = book_dir / "art"
+        story_path = book_dir / "story_package.json"
+
+        if not story_path.exists():
+            return jsonify({"ok": False, "error": "Story not found"}), 404
+
+        with open(story_path) as f:
+            story_data = json.load(f)
+
+        # Get story and character info
+        story = story_data.get('story', story_data)
+        scenes = story.get('scenes', [])
+        character = story_data.get('character', {})
+        metadata = story_data.get('metadata', {})
+        brief = metadata.get('brief', {})
+        art_style = brief.get('art_style', '')
+
+        # Find character sheet path
+        char_name = character.get('name', 'Character')
+        char_sheet_path = art_dir / "character_sheets" / f"{char_name}_sheet.png"
+
+        if not char_sheet_path.exists():
+            # Try to find any character sheet
+            char_sheets_dir = art_dir / "character_sheets"
+            if char_sheets_dir.exists():
+                sheets = list(char_sheets_dir.glob("*.png"))
+                if sheets:
+                    char_sheet_path = sheets[0]
+                else:
+                    return jsonify({"ok": False, "error": "No character sheet found. Generate art first."}), 400
+            else:
+                return jsonify({"ok": False, "error": "No character sheet found. Generate art first."}), 400
+
+        # Initialize pipeline
+        pipeline = ArtPipeline(style=art_style)
+
+        if image_type == 'spread':
+            if scene_index < 1 or scene_index > len(scenes):
+                return jsonify({"ok": False, "error": "Invalid scene index"}), 400
+
+            scene = scenes[scene_index - 1]  # Convert to 0-based
+            scene_desc = scene.get('illustration_prompt', '')
+            output_path = art_dir / f"scene_{scene_index:02d}.png"
+
+            # Use fix_image method
+            success, result = pipeline.fix_image(
+                f"scene_{scene_index:02d}.png",
+                char_sheet_path,
+                scene_desc,
+                illustration_type="spread",
+                output_dir=book_dir,
+                style=art_style
+            )
+
+            if success:
+                return jsonify({
+                    "ok": True,
+                    "message": f"Scene {scene_index} regenerated",
+                    "image_path": f"scene_{scene_index:02d}.png"
+                })
+            else:
+                return jsonify({"ok": False, "error": result}), 500
+
+        elif image_type == 'cover':
+            cover_scene = scenes[0].get('illustration_prompt', '') if scenes else ''
+            output_path = art_dir / "cover.png"
+
+            _, _ = pipeline.generate_illustration(
+                cover_scene,
+                char_sheet_path,
+                illustration_type="cover",
+                output_path=output_path,
+                style=art_style
+            )
+
+            return jsonify({
+                "ok": True,
+                "message": "Cover regenerated",
+                "image_path": "cover.png"
+            })
+
+        elif image_type == 'character_sheet':
+            char_desc = character.get('sheet_prompt', character.get('description', ''))
+            output_path = char_sheet_path
+
+            _, _ = pipeline.generate_character_sheet(
+                char_desc,
+                output_path,
+                style=art_style
+            )
+
+            return jsonify({
+                "ok": True,
+                "message": "Character sheet regenerated",
+                "image_path": f"character_sheets/{char_name}_sheet.png"
+            })
+
+        else:
+            return jsonify({"ok": False, "error": f"Unknown image type: {image_type}"}), 400
+
+    except Exception as e:
+        log.exception("Image regeneration failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route('/api/pdf', methods=['POST'])

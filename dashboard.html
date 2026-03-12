@@ -119,6 +119,29 @@
   /* Image gallery */
   .gallery { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
   .gallery img { width:100%; border-radius:6px; border:1px solid var(--border); }
+  .image-item { position:relative; }
+  .image-item .regen-btn { position:absolute; bottom:6px; right:6px; padding:4px 8px; font-size:10px; background:rgba(0,0,0,0.7); border:1px solid var(--border); border-radius:4px; color:var(--text); cursor:pointer; opacity:0; transition:opacity 0.15s; }
+  .image-item:hover .regen-btn { opacity:1; }
+  .image-item .image-label { position:absolute; top:6px; left:6px; padding:2px 6px; font-size:9px; background:rgba(0,0,0,0.7); border-radius:3px; color:var(--dim); }
+
+  /* Scene text editor */
+  .scene-editor textarea { width:100%; min-height:80px; background:var(--bg); border:1px solid var(--accent); border-radius:8px; padding:10px; color:var(--text); font-family:inherit; font-size:13px; resize:vertical; line-height:1.6; }
+  .scene-actions { display:flex; gap:8px; margin-top:8px; justify-content:flex-end; }
+  .scene-text { cursor:pointer; padding:8px; border-radius:6px; transition:background 0.12s; }
+  .scene-text:hover { background:var(--surface2); }
+  .edit-hint { font-size:10px; color:var(--dim); opacity:0; transition:opacity 0.12s; margin-left:8px; }
+  .story-scene:hover .edit-hint { opacity:1; }
+
+  /* Mode selector tabs */
+  .mode-tabs { display:flex; gap:0; margin-bottom:24px; }
+  .mode-tab { flex:1; padding:16px 20px; background:var(--surface); border:1px solid var(--border); cursor:pointer; text-align:center; transition:all 0.12s; }
+  .mode-tab:first-child { border-radius:10px 0 0 10px; }
+  .mode-tab:last-child { border-radius:0 10px 10px 0; border-left:none; }
+  .mode-tab.active { background:var(--accent-bg); border-color:var(--accent); }
+  .mode-tab h4 { font-size:14px; margin-bottom:3px; }
+  .mode-tab p { font-size:11px; color:var(--dim); }
+  .mode-tab.active h4 { color:var(--accent2); }
+  .mode-tab .coming-soon { font-size:9px; background:var(--yellow); color:var(--bg); padding:2px 6px; border-radius:10px; margin-left:6px; }
 
   /* Loading spinner */
   .spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.6s linear infinite; display:inline-block; }
@@ -150,6 +173,7 @@
 const API = '';  // same origin
 const S = {
   step: 0,
+  mode: 'childrens',  // 'childrens' | 'coloring'
   status: null,  // from /api/status
   config: { authorName:'Starlit Stories Press', publisher:'Starlit Stories Press' },
   book: {
@@ -159,7 +183,13 @@ const S = {
     trimSize:'8.5x8.5', formats:['paperback','ebook'], pricePaperback:'9.99', priceEbook:'4.99'
   },
   research: { results:[], selected:null, loading:false },
-  gen: { bookId:null, story:null, artProgress:null, stages:{research:'pending',story:'pending',art:'pending',pdf:'pending',publish:'pending'}, log:[] }
+  gen: {
+    bookId:null, story:null, artProgress:null,
+    stages:{research:'pending',story:'pending',art:'pending',pdf:'pending',publish:'pending'},
+    log:[],
+    generatedImages: [],  // [{type:'cover'|'spread'|'character_sheet', index:1, path:'scene_01.png'}]
+    editingScene: null    // Index of scene being edited, or null
+  }
 };
 
 const STEPS = [
@@ -218,11 +248,45 @@ function render() {
 function go(n) { S.step=n; render(); window.scrollTo(0,0); }
 function v(id) { const el=document.getElementById(id); return el?el.value:''; }
 
+// ─── Mode selector ───
+function setMode(mode) {
+  S.mode = mode;
+  render();
+}
+
 // ─── Step 1: Setup ───
 function vSetup() {
   const st = S.status || {};
   const dot = (ok) => `<span class="status-dot ${ok?'on':ok===false?'off':'unknown'}"></span>`;
+
+  // Mode selector at top
+  const modeSelector = `
+    <div class="mode-tabs">
+      <div class="mode-tab ${S.mode==='childrens'?'active':''}" onclick="setMode('childrens')">
+        <h4>Children's Book</h4>
+        <p>Illustrated picture book with story</p>
+      </div>
+      <div class="mode-tab ${S.mode==='coloring'?'active':''}" onclick="setMode('coloring')">
+        <h4>Coloring Book<span class="coming-soon">Coming Soon</span></h4>
+        <p>Line art pages for coloring</p>
+      </div>
+    </div>`;
+
+  // Coloring book placeholder
+  if (S.mode === 'coloring') {
+    return `<div class="step active">
+      ${modeSelector}
+      <div class="card" style="text-align:center;padding:60px 40px;">
+        <div style="font-size:48px;margin-bottom:16px;">🎨</div>
+        <h2 style="margin-bottom:8px;">Coloring Book Mode</h2>
+        <p style="color:var(--dim);margin-bottom:24px;">This feature is coming soon! Generate line art coloring pages for children.</p>
+        <button class="btn btn-secondary" onclick="setMode('childrens')">← Back to Children's Books</button>
+      </div>
+    </div>`;
+  }
+
   return `<div class="step active">
+    ${modeSelector}
     <h2>Setup</h2>
     <p class="sub">System checks. Everything runs locally — nothing leaves your machine except API calls.</p>
 
@@ -598,13 +662,47 @@ function vGenerate() {
     ${S.gen.story ? `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <h3 style="margin:0;">Story Preview: ${S.gen.story.title||S.gen.story.story?.title||''}</h3>
-        <button class="btn btn-secondary" onclick="regenerateStory()">↻ Regenerate Story</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" onclick="regenerateStory()">↻ Regenerate Story</button>
+        </div>
       </div>
       <div class="story-preview">
         ${(S.gen.story.story?.scenes||S.gen.story.scenes||[]).map((sc,i) => `
           <div class="story-scene">
-            <div class="scene-num">Scene ${i+1}</div>
-            <div>${Array.isArray(sc.text) ? sc.text.join('<br/>') : (sc.text||sc.content||'')}</div>
+            <div class="scene-num">
+              Scene ${i+1}
+              <button class="btn btn-ghost" style="font-size:10px;padding:2px 8px;margin-left:8px;" onclick="editScene(${i})">
+                ${S.gen.editingScene===i?'Cancel':'Edit'}
+              </button>
+              <span class="edit-hint">click to edit text</span>
+            </div>
+            ${S.gen.editingScene === i ? `
+              <div class="scene-editor">
+                <textarea id="scene-text-${i}">${Array.isArray(sc.text) ? sc.text.join('\\n') : (sc.text||sc.content||'')}</textarea>
+                <div class="scene-actions">
+                  <button class="btn btn-ghost" onclick="cancelSceneEdit()">Cancel</button>
+                  <button class="btn btn-primary" onclick="saveSceneText(${i})">Save</button>
+                </div>
+              </div>
+            ` : `
+              <div class="scene-text" onclick="editScene(${i})" title="Click to edit">
+                ${Array.isArray(sc.text) ? sc.text.join('<br/>') : (sc.text||sc.content||'')}
+              </div>
+            `}
+          </div>
+        `).join('')}
+      </div>
+    </div>` : ''}
+
+    ${S.gen.generatedImages.length > 0 ? `<div class="card">
+      <h3>Generated Images</h3>
+      <p style="font-size:11px;color:var(--dim);margin-bottom:12px;">Click the regenerate button on any image to create a new version</p>
+      <div class="gallery">
+        ${S.gen.generatedImages.map((img, i) => `
+          <div class="image-item">
+            <span class="image-label">${img.type === 'spread' ? 'Scene '+img.index : img.type.replace('_',' ')}</span>
+            <img src="/api/files/${S.gen.bookId}/art/${img.path}?t=${img.timestamp||Date.now()}" alt="${img.type}" loading="lazy"/>
+            <button class="regen-btn" onclick="regenerateImage('${img.type}', ${img.index})">↻ Regen</button>
           </div>
         `).join('')}
       </div>
@@ -680,6 +778,22 @@ async function runStage(stage) {
                     const data = JSON.parse(line.slice(6));
                     S.gen.artProgress = data;
                     S.gen.log.push(`[${new Date().toLocaleTimeString()}] ${data.message}`);
+
+                    // Track completed images for gallery display
+                    if (data.image_path && (data.stage.endsWith('_done') || data.stage === 'spread' || data.stage === 'cover' || data.stage === 'character_sheet')) {
+                      const imageType = data.stage.replace('_done', '');
+                      // Avoid duplicates
+                      const exists = S.gen.generatedImages.some(img => img.path === data.image_path);
+                      if (!exists) {
+                        S.gen.generatedImages.push({
+                          type: imageType === 'spread' ? 'spread' : imageType,
+                          index: data.current || S.gen.generatedImages.length + 1,
+                          path: data.image_path,
+                          timestamp: Date.now()
+                        });
+                      }
+                    }
+
                     render();
 
                     if (data.stage === 'error') {
@@ -750,10 +864,87 @@ async function regenerateStory() {
   S.gen.stages.art = 'pending';
   S.gen.stages.pdf = 'pending';
   S.gen.stages.publish = 'pending';
+  S.gen.generatedImages = [];
+  S.gen.editingScene = null;
   S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating story...`);
   render();
   // Auto-run story generation
   await runStage('story');
+}
+
+// ─── Scene Text Editing ───
+function editScene(index) {
+  S.gen.editingScene = S.gen.editingScene === index ? null : index;
+  render();
+}
+
+function cancelSceneEdit() {
+  S.gen.editingScene = null;
+  render();
+}
+
+async function saveSceneText(sceneIndex) {
+  const textarea = document.getElementById(`scene-text-${sceneIndex}`);
+  if (!textarea) return;
+
+  const newText = textarea.value.split('\n').filter(line => line.trim());
+
+  // Update local state
+  const scenes = S.gen.story.story?.scenes || S.gen.story.scenes || [];
+  scenes[sceneIndex].text = newText;
+
+  // Save to backend
+  try {
+    const r = await api('/api/story/update', {
+      book_id: S.gen.bookId,
+      scene_index: sceneIndex,
+      text: newText
+    });
+
+    if (r.ok) {
+      S.gen.log.push(`[${new Date().toLocaleTimeString()}] Scene ${sceneIndex + 1} text saved`);
+      S.gen.editingScene = null;
+    } else {
+      throw new Error(r.error || 'Save failed');
+    }
+  } catch(e) {
+    alert('Failed to save: ' + e.message);
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR saving scene: ${e.message}`);
+  }
+  render();
+}
+
+// ─── Image Regeneration ───
+async function regenerateImage(imageType, sceneIndex) {
+  if (!confirm(`Regenerate the ${imageType === 'spread' ? 'Scene ' + sceneIndex : imageType.replace('_', ' ')} image?`)) return;
+
+  S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${imageType}...`);
+  render();
+
+  try {
+    const r = await api('/api/regenerate-image', {
+      book_id: S.gen.bookId,
+      image_type: imageType,
+      scene_index: sceneIndex
+    });
+
+    if (r.ok) {
+      S.gen.log.push(`[${new Date().toLocaleTimeString()}] ${imageType} regenerated successfully`);
+      // Force image refresh by updating timestamp
+      const imgIndex = S.gen.generatedImages.findIndex(
+        img => img.path === r.image_path || (img.type === imageType && (imageType !== 'spread' || img.index === sceneIndex))
+      );
+      if (imgIndex >= 0) {
+        S.gen.generatedImages[imgIndex].timestamp = Date.now();
+      }
+    } else {
+      throw new Error(r.error || 'Regeneration failed');
+    }
+  } catch(e) {
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
+    alert('Regeneration failed: ' + e.message);
+  }
+  render();
 }
 
 async function loadDemoStory() {
@@ -845,7 +1036,7 @@ function vOutput() {
 }
 
 function startNew() {
-  S.gen = {bookId:null,story:null,stages:{story:'pending',art:'pending',pdf:'pending',publish:'pending'},log:[]};
+  S.gen = {bookId:null,story:null,artProgress:null,stages:{story:'pending',art:'pending',pdf:'pending',publish:'pending'},log:[],generatedImages:[],editingScene:null};
   S.research.selected = null;
   S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.setting=''; S.book.tone='whimsical'; S.book.notes='';
   go(1);

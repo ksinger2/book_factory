@@ -1,7 +1,25 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-11 21:05 (via `/reinit`)
+> **Last Updated:** 2026-03-11 21:30
 > **Session ID:** reinit-20260311
+
+---
+
+## Latest Changes (This Session)
+
+### New Dashboard Features Added
+1. **Mode Selector** - Toggle at top of Setup page: "Children's Book" vs "Coloring Book" (stub)
+2. **Real-time Image Gallery** - Images appear in UI as they're generated during art pipeline
+3. **Single Image Regeneration** - Click "Regen" button on any image to regenerate just that one
+4. **Story Text Editing** - Click any scene text to edit, save changes to `story_package.json`
+
+### New API Endpoints
+- `POST /api/story/update` - Update scene text: `{book_id, scene_index, text}`
+- `POST /api/regenerate-image` - Regenerate single image: `{book_id, image_type, scene_index}`
+
+### Files Modified
+- `dashboard.html` - Mode selector, image gallery, scene editor, regenerate buttons
+- `run.py` - Two new endpoints, SSE events now include `image_path`
 
 ---
 
