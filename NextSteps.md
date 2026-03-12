@@ -1,11 +1,21 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-12 14:30
-> **Session ID:** session-20260312b
+> **Last Updated:** 2026-03-12 19:00
+> **Session ID:** session-20260312c
 
 ---
 
 ## Latest Changes (This Session)
+
+### Environment Setup (2026-03-12 PM)
+- Created Python virtual environment (`venv/`) for dependency isolation
+- Installed all requirements via `pip install -r requirements.txt`
+- Flask dashboard server verified running on **http://localhost:5555**
+
+### Test Run: Baroque Blooms Coloring Book (2026-03-12)
+- Successfully generated a 12-page coloring book with reference sheet
+- Output in `output/Baroque_Blooms-20260312_082203/`
+- All pipeline fixes (theme, uniqueness, edge cutoff) applied in this run
 
 ### Coloring Book Pipeline Fixes (2026-03-12)
 Critical fixes for theme handling, page uniqueness, and edge cutoff issues:
@@ -262,6 +272,7 @@ output/
 |---------|------|--------|-------|-------------|
 | Priscillas_Magical_Forest_Adventure-20260307 | Children's | **COMPLETE** | PDF Done | Ready to publish |
 | Christopher_and_the_Magical_Cars-20260308 | Children's | Art Done | Cover Only | Needs Interior.pdf |
+| Baroque_Blooms-20260312 | Coloring | **COMPLETE** | 12 Pages Generated | Needs cover + PDF build |
 | Holidays__Seasons_Coloring_Book-20260312 | Coloring | In Progress | Pages | Generating pages |
 
 ### Configuration State
@@ -279,7 +290,9 @@ output/
 6. **ARCHITECTURE.md outdated** - still references Claude for story generation
 
 ### Uncommitted Changes
-*Committing now - coloring book pipeline fixes*
+- `generate_coloring_book.py` - Standalone coloring book generation script
+- `output/Baroque_Blooms-*` - Test coloring book outputs
+- `venv/` - Python virtual environment (should stay untracked)
 
 ---
 
@@ -287,10 +300,10 @@ output/
 
 Based on agent analysis, prioritized by impact:
 
-1. **Commit all pending changes** - Major features and bug fixes uncommitted
-2. **Test coloring book end-to-end** - Generate a full coloring book and verify PDF output
-3. **Publish Priscilla's book** - Ready for KDP, test the full pipeline
-4. **Generate Interior.pdf for Christopher** - Art complete, needs PDF build
+1. **Build Baroque Blooms PDF** - 12 pages generated, needs cover + PDF assembly
+2. **Publish Priscilla's book** - Ready for KDP, test the full publishing pipeline
+3. **Generate Interior.pdf for Christopher** - Art complete, needs PDF build
+4. **Test coloring book with "insects" theme** - Verify theme-specific fixes end-to-end
 5. **Update ARCHITECTURE.md** - Add coloring book pipeline documentation
 
 ---
