@@ -1,29 +1,75 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-11 21:30
-> **Session ID:** reinit-20260311
+> **Last Updated:** 2026-03-12 11:45
+> **Session ID:** session-20260312
 
 ---
 
 ## Latest Changes (This Session)
 
-### New Dashboard Features Added
-1. **Mode Selector** - Toggle at top of Setup page: "Children's Book" vs "Coloring Book" (stub)
-2. **Real-time Image Gallery** - Images appear in UI as they're generated during art pipeline
-3. **Single Image Regeneration** - Click "Regen" button on any image to regenerate just that one
-4. **Story Text Editing** - Click any scene text to edit, save changes to `story_package.json`
+### Coloring Book Mode - Now Fully Functional
+The coloring book pipeline is now complete and generating books:
 
-### New API Endpoints
-- `POST /api/story/update` - Update scene text: `{book_id, scene_index, text}`
-- `POST /api/regenerate-image` - Regenerate single image: `{book_id, image_type, scene_index}`
+1. **Full Pipeline Working** - Reference sheet → Page generation → Cover → PDF build
+2. **Theme-Dominant Prompting** - Style generator completely rewritten to strongly emphasize theme (fixes "mandalas showing up for Christmas" issue)
+3. **QA Checker Bug Fixed** - `NO_EDGE_CUTOFF` was missing from `score_keys` list, causing all QA to falsely fail and loop indefinitely
+4. **Style/Notes Propagation** - Brief settings now properly flow through entire generation pipeline
+
+### Dashboard Performance Fixes
+1. **Progress Bar Optimization** - No longer causes full page refresh (targeted DOM updates via `updateProgressDisplay()`)
+2. **Rhyming Toggle Fix** - No longer refreshes entire page (targeted update via `toggleRhyming()`)
+3. **Cancel Buttons** - Added cancel functionality during individual image regeneration with AbortController
+
+### New Features
+1. **Character Sheet Guidance** - Users can add text guidance + reference image when regenerating character sheets
+2. **Custom Style Input** - Dropdown + custom text option for coloring book styles
+3. **Output Directory Organization** - Books now save to `output/ChildrensBook/` or `output/ColoringBook/` based on type
 
 ### Files Modified
-- `dashboard.html` - Mode selector, image gallery, scene editor, regenerate buttons
-- `run.py` - Two new endpoints, SSE events now include `image_path`
+- `dashboard.html` - Performance fixes, cancel buttons, guidance UI, custom style
+- `run.py` - Directory organization, debug logging, brief handling
+- `agents/coloring_style_generator.py` - Theme-dominant prompt rewrite
+- `agents/coloring_qa_checker.py` - Added NO_EDGE_CUTOFF to score parsing
+- `agents/coloring_page_generator.py` - Stronger edge/cleanliness requirements
+- `agents/coloring_cover_generator.py` - Style field support
+- `agents/art_pipeline.py` - Character sheet guidance feature
 
 ---
 
 ## Agent Status Reports
+
+### Coloring Book Agents (NEW)
+**Domain:** Coloring book generation pipeline
+**Status:** READY - Actively generating books
+
+**Components:**
+- `coloring_style_generator.py` - Reference sheet + concept generation
+- `coloring_page_generator.py` - Individual page generation with QA retry
+- `coloring_cover_generator.py` - Cover generation
+- `coloring_qa_checker.py` - GPT-4o vision-based quality validation
+
+**Recent Changes (2026-03-12):**
+- Fixed QA checker: `NO_EDGE_CUTOFF` now properly parsed from responses
+- Rewrote style generator prompt to put theme FIRST with strong emphasis
+- Added art style support throughout pipeline (zentangle, mandala, kawaii, etc.)
+- Strengthened edge/cleanliness requirements in page generator
+
+**Current State:**
+- Generating coloring books with theme-appropriate content
+- QA validation working correctly
+- 10 art styles available
+- Age levels: kid, tween, teen, ya, adult, elder
+
+**Next Steps:**
+- Add more granular progress updates during page generation
+- Consider batch generation for faster throughput
+- Add style preview images in UI
+
+**Blockers/Notes:**
+- OpenAI's image model sometimes ignores theme (prompt engineering ongoing)
+- Large page counts (24+) take significant time
+
+---
 
 ### Niche Researcher
 **Domain:** Market research, Amazon BSR analysis, keyword research
@@ -80,7 +126,12 @@
 **Domain:** Illustration generation, character consistency, QA validation
 **Status:** READY - Successfully generating books
 
-**Recent Changes:**
+**Recent Changes (2026-03-12):**
+- **Character Sheet Guidance** - Users can provide text guidance + reference image when regenerating
+- Guidance text appended to prompt as "STYLE REFINEMENTS"
+- Reference image support for steering regeneration
+
+**Previous Changes:**
 - **Model upgrade:** gpt-4o → gpt-image-1
 - Added reference image support for character likeness from photos
 - New "Character DNA" system for consistency across scenes
@@ -88,17 +139,15 @@
 - Style cascade: method param → story_package → instance → DEFAULT_STYLE
 
 **Current State:**
-- 9 books with successful art_result.json completions
-- Most recent success: Christopher_and_the_Magical_Cars (12 spreads, cover, character sheet)
+- 9+ books with successful art_result.json completions
+- Character sheet guidance working
 - Back cover generation returning `null` in some runs
 
 **Next Steps:**
 - Investigate back_cover generation (exists in code but not triggering)
-- **FIX QA BUG:** `qa_check()` uses Anthropic API format but client is OpenAI - silent failure
 - Evaluate upgrading to gpt-image-1.5 for better consistency
 
 **Blockers/Notes:**
-- **Critical Bug:** QA vision check broken (wrong API client)
 - Scene images saved to `art/` not `art/spreads/` (differs from docs)
 - Reference image feature requires base64 input (no file path support yet)
 
@@ -159,13 +208,31 @@
 
 ## Cross-Team Context
 
+### Output Directory Structure (NEW)
+```
+output/
+├── ChildrensBook/
+│   └── {BookTitle}-{timestamp}/
+│       ├── brief.json
+│       ├── story_package.json
+│       ├── art/
+│       └── *.pdf
+└── ColoringBook/
+    └── {BookTitle}-{timestamp}/
+        ├── coloring_brief.json
+        ├── reference_sheet.png
+        ├── page_concepts.json
+        ├── pages/
+        └── *.pdf
+```
+
 ### Active Books in Pipeline
 
-| Book ID | Status | Stage | Next Action |
-|---------|--------|-------|-------------|
-| Priscillas_Magical_Forest_Adventure-20260307 | **COMPLETE** | PDF Done | Ready to publish |
-| Christopher_and_the_Magical_Cars-20260308 | Art Done | Cover Only | Needs Interior.pdf |
-| Christophers_Magical_Car_Journey-20260307 | Art Incomplete | Partial Art | Needs art regeneration |
+| Book ID | Type | Status | Stage | Next Action |
+|---------|------|--------|-------|-------------|
+| Priscillas_Magical_Forest_Adventure-20260307 | Children's | **COMPLETE** | PDF Done | Ready to publish |
+| Christopher_and_the_Magical_Cars-20260308 | Children's | Art Done | Cover Only | Needs Interior.pdf |
+| Holidays__Seasons_Coloring_Book-20260312 | Coloring | In Progress | Pages | Generating pages |
 
 ### Configuration State
 - `config/studio_config.yaml` properly configured
@@ -173,15 +240,19 @@
 - Art quality: high, QA: enabled, retries: 3
 - Pricing: $9.99 paperback, $4.99 eBook
 
-### Known Issues
-1. **Art Pipeline QA broken** - uses wrong API client (Anthropic format, OpenAI client)
+### Known Issues (Updated)
+1. ~~**Art Pipeline QA broken**~~ - FIXED for coloring books
 2. **Competition scores always 0** - Niche researcher formula issue
 3. **ARCHITECTURE.md outdated** - still references Claude for story generation
+4. **OpenAI theme adherence** - Image model sometimes ignores theme in prompts
 
 ### Uncommitted Changes
+- dashboard.html (performance fixes, coloring mode, guidance UI)
+- run.py (directory organization, coloring endpoints)
+- agents/coloring_*.py (new coloring book agents)
+- agents/art_pipeline.py (guidance feature)
 - niche_researcher.py (recursion fix)
 - story_engine.py (API migration)
-- art_pipeline.py (gpt-image-1 upgrade)
 - pdf_builder.py (filename standardization)
 - kdp_publisher.py (profile selection)
 
@@ -191,11 +262,11 @@
 
 Based on agent analysis, prioritized by impact:
 
-1. **Fix Art Pipeline QA bug** - Critical: QA checks silently failing
-2. **Publish Priscilla's book** - Ready for KDP, test the full pipeline
-3. **Generate Interior.pdf for Christopher** - Art complete, needs PDF build
-4. **Commit all pending changes** - Multiple important fixes uncommitted
-5. **Update ARCHITECTURE.md** - Documentation out of sync with code
+1. **Commit all pending changes** - Major features and bug fixes uncommitted
+2. **Test coloring book end-to-end** - Generate a full coloring book and verify PDF output
+3. **Publish Priscilla's book** - Ready for KDP, test the full pipeline
+4. **Generate Interior.pdf for Christopher** - Art complete, needs PDF build
+5. **Update ARCHITECTURE.md** - Add coloring book pipeline documentation
 
 ---
 
@@ -206,5 +277,6 @@ Based on agent analysis, prioritized by impact:
 | Niche Researcher | `ARCHITECTURE.md` | `config/studio_config.yaml` (research section) |
 | Story Engine | `resources/grammar_guide.txt`, `ARCHITECTURE.md` | `config/studio_config.yaml` (defaults) |
 | Art Pipeline | `prompting_skill.md`, `ARCHITECTURE.md` | `config/studio_config.yaml` (art section) |
+| Coloring Agents | `resources/coloring_style_skill.md` | Brief settings in UI |
 | PDF Builder | `ARCHITECTURE.md` | `config/studio_config.yaml` (defaults) |
 | KDP Publisher | `ARCHITECTURE.md` | `config/studio_config.yaml` (kdp section) |

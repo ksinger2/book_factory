@@ -271,15 +271,22 @@ TECHNICAL REQUIREMENTS:
 6. NO watermarks or signatures
 7. Matte black lines only - no shine or gloss effects
 
-*** CRITICAL - EDGE AND COMPOSITION REQUIREMENTS ***
-8. ENTIRE subject must be FULLY VISIBLE within the page boundaries
-9. NO part of the main subject should be cut off at any edge
-10. Leave clear margins around all elements - nothing touching page edges
-11. The subject must be COMPLETE and WHOLE, not cropped
-12. NO random dots, specks, or stray marks anywhere on the page
-13. Background must be CLEAN pure white with no artifacts
+*** ABSOLUTE REQUIREMENTS - VIOLATIONS WILL FAIL QA ***
 
-OUTPUT: A single coloring page featuring "{config.concept}" as the main subject, fully contained within the page."""
+EDGE RULES (CRITICAL - MUST FOLLOW):
+8. NOTHING may touch or extend beyond ANY edge of the page - top, bottom, left, or right
+9. ALL subjects (animals, objects, characters) must be 100% COMPLETE and WHOLE
+10. NO cropping, cutting off, or partial views of ANY element
+11. Maintain AT LEAST 5% margin on ALL sides - nothing in the outer border zone
+12. If it doesn't fit completely, make it SMALLER - never crop it
+
+CLEANLINESS RULES (CRITICAL):
+13. ZERO random dots, specks, spots, or stray marks anywhere
+14. Background must be PERFECTLY clean pure white
+15. No artifacts, smudges, or unintentional marks of any kind
+16. Every mark on the page must be intentional linework
+
+OUTPUT: A single coloring page featuring "{config.concept}" as the main subject. The ENTIRE subject must be fully contained within the page with clear margins on all sides. Nothing cut off."""
 
         logger.info(f"Generating page {config.page_num}: {config.concept[:50]}...")
 

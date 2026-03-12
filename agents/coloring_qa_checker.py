@@ -257,8 +257,8 @@ AND average of all scores must be 75+"""
 
         lines = response_text.strip().split('\n')
 
-        # Parse scores
-        score_keys = ['CLOSED_LINES', 'NO_ARTIFACTS', 'PURE_BW', 'LINE_QUALITY', 'AGE_APPROPRIATE']
+        # Parse scores - MUST include all critical checks!
+        score_keys = ['CLOSED_LINES', 'NO_ARTIFACTS', 'PURE_BW', 'NO_EDGE_CUTOFF', 'LINE_QUALITY', 'AGE_APPROPRIATE']
         for line in lines:
             for key in score_keys:
                 if line.strip().startswith(key + ':'):

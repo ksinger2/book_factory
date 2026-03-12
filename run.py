@@ -32,6 +32,12 @@ CONFIG_PATH = BASE_DIR / "config" / "studio_config.yaml"
 OUTPUT_DIR = BASE_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+# Organized subdirectories for different book types
+CHILDRENS_OUTPUT_DIR = OUTPUT_DIR / "ChildrensBook"
+CHILDRENS_OUTPUT_DIR.mkdir(exist_ok=True)
+COLORING_OUTPUT_DIR = OUTPUT_DIR / "ColoringBook"
+COLORING_OUTPUT_DIR.mkdir(exist_ok=True)
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger("studio")
 
@@ -161,7 +167,7 @@ def api_story():
             safe_title = "untitled"
         # Add timestamp suffix to ensure uniqueness
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        book_id = f"{safe_title}-{timestamp}"
+        book_id = f"ChildrensBook/{safe_title}-{timestamp}"
         book_dir = OUTPUT_DIR / book_id
         book_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1096,12 +1102,12 @@ def api_coloring_brief():
         if not brief:
             return jsonify({"ok": False, "error": "No brief provided"}), 400
 
-        # Create book directory
+        # Create book directory in ColoringBook subdirectory
         title = brief.get('title', 'Coloring Book')
         safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
         safe_title = safe_title.strip().replace(" ", "_")[:50] or "coloring_book"
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        book_id = f"{safe_title}-{timestamp}"
+        book_id = f"ColoringBook/{safe_title}-{timestamp}"
         book_dir = OUTPUT_DIR / book_id
         book_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1136,6 +1142,12 @@ def api_coloring_reference():
 
         with open(brief_path) as f:
             brief_data = json.load(f)
+
+        # Debug logging for style
+        log.info(f"=== COLORING REFERENCE DEBUG ===")
+        log.info(f"brief_data keys: {list(brief_data.keys())}")
+        log.info(f"brief_data['style']: {brief_data.get('style', 'NOT FOUND - defaulting to bold-easy')}")
+        log.info(f"=== END DEBUG ===")
 
         # Create style brief
         style_brief = StyleBrief(

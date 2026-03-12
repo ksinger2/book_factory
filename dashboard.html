@@ -204,13 +204,16 @@ const S = {
     editingScene: null,   // Index of scene being edited, or null
     charsheetGuidance: '',           // User guidance text for regeneration
     charsheetRegenReference: null,   // Base64 reference image for regeneration
-    charsheetRegenReferencePreview: ''  // Preview URL for regeneration reference
+    charsheetRegenReferencePreview: '',  // Preview URL for regeneration reference
+    progressTimer: null,              // Interval ID for progress updates
+    progressStart: null,              // Timestamp when generation started
+    progressElapsed: 0                // Seconds elapsed
   },
   // Coloring book state
   coloring: {
     brief: {
       title: '', theme: '', themeCustom: '', ageLevel: 'adult', difficulty: 'medium',
-      numPages: 24, bookSize: '8.5x8.5', referenceImage: null, notes: '', style: 'bold-easy'
+      numPages: 24, bookSize: '8.5x8.5', referenceImage: null, notes: '', style: 'bold-easy', customStyle: ''
     },
     bookId: null,
     referenceSheet: null,
@@ -222,10 +225,14 @@ const S = {
     stages: {brief:'pending', reference:'pending', pages:'pending', cover:'pending', pdf:'pending', publish:'pending'},
     progress: null,
     log: [],
-    regenerating: {}  // {pageNum: true} to track which pages are regenerating
+    regenerating: {},  // {pageNum: true} to track which pages are regenerating
+    progressTimer: null,
+    progressStart: null,
+    progressElapsed: 0
   },
   // Track regenerating images globally
-  regenerating: {}  // {'spread_1': true, 'cover': true, etc.}
+  regenerating: {},  // {'spread_1': true, 'cover': true, etc.}
+  regenAbortControllers: {}  // AbortControllers for cancellation
 };
 
 // Coloring book theme options
@@ -314,6 +321,19 @@ function render() {
   }
   document.getElementById('content').innerHTML = views[S.step]();
   bind();
+}
+
+// Update only progress bar and timer - no full re-render
+function updateProgressDisplay(type) {
+  const elapsed = type === 'coloring' ? S.coloring.progressElapsed : S.gen.progressElapsed;
+  const progressBar = document.getElementById('progress-bar');
+  const progressTime = document.getElementById('progress-time');
+  if (progressBar) {
+    progressBar.style.width = Math.min(95, (elapsed / 60) * 100) + '%';
+  }
+  if (progressTime) {
+    progressTime.textContent = elapsed + 's elapsed';
+  }
 }
 
 function go(n) {
@@ -531,12 +551,12 @@ function vBrief() {
           <label>Writing Style</label>
           <div style="display:flex;align-items:center;gap:12px;margin-top:8px;">
             <label class="toggle-switch">
-              <input type="checkbox" id="rhyming" ${S.book.rhyming ? 'checked' : ''} onchange="saveFieldsBeforeToggle();S.book.rhyming=this.checked;render();">
+              <input type="checkbox" id="rhyming" ${S.book.rhyming ? 'checked' : ''} onchange="toggleRhyming(this.checked)">
               <span class="toggle-slider"></span>
             </label>
-            <span style="color:var(--text);font-size:14px;">${S.book.rhyming ? 'Rhyming Verse' : 'Regular Prose'}</span>
+            <span id="rhyming-label" style="color:var(--text);font-size:14px;">${S.book.rhyming ? 'Rhyming Verse' : 'Regular Prose'}</span>
           </div>
-          <div class="hint">${S.book.rhyming ? 'Story will be written with rhymes and rhythm' : 'Story will be written in regular narrative prose'}</div>
+          <div id="rhyming-hint" class="hint">${S.book.rhyming ? 'Story will be written with rhymes and rhythm' : 'Story will be written in regular narrative prose'}</div>
         </div>
       </div>
       <div class="row">
@@ -601,6 +621,16 @@ function saveFieldsBeforeToggle() {
   if (setting) S.book.setting = setting.value;
   if (tone) S.book.tone = tone.value;
   if (notes) S.book.notes = notes.value;
+}
+
+// Toggle rhyming without full page re-render
+function toggleRhyming(checked) {
+  saveFieldsBeforeToggle();
+  S.book.rhyming = checked;
+  const label = document.getElementById('rhyming-label');
+  const hint = document.getElementById('rhyming-hint');
+  if (label) label.textContent = checked ? 'Rhyming Verse' : 'Regular Prose';
+  if (hint) hint.textContent = checked ? 'Story will be written with rhymes and rhythm' : 'Story will be written in regular narrative prose';
 }
 
 function saveBrief() {
@@ -857,9 +887,24 @@ function vGenerate() {
       ` : `
         <div style="text-align:center;padding:20px;">
           ${S.gen.stages.charsheet === 'running' ? `
-            <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
-              <div class="spinner"></div>
-              <span style="color:var(--dim);">Generating character sheet...</span>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:20px;">
+              <div class="spinner" style="width:24px;height:24px;"></div>
+              <span style="color:var(--text);font-weight:500;">Generating character sheet...</span>
+
+              <!-- Progress bar -->
+              <div style="width:100%;max-width:300px;">
+                <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden;">
+                  <div id="progress-bar" style="background:var(--accent);height:100%;width:${Math.min(95, (S.gen.progressElapsed / 60) * 100)}%;transition:width 1s ease;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--dim);">
+                  <span id="progress-time">${S.gen.progressElapsed}s elapsed</span>
+                  <span>~45-60s typical</span>
+                </div>
+              </div>
+
+              <p style="font-size:11px;color:var(--dim);text-align:center;max-width:280px;">
+                AI is creating a 4-panel reference sheet with multiple poses and expressions...
+              </p>
             </div>
           ` : `
             <p style="color:var(--dim);margin-bottom:16px;">
@@ -889,6 +934,7 @@ function vGenerate() {
               ${isRegenerating ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;">
                 <div class="spinner"></div>
                 <span style="font-size:11px;color:var(--text);">Regenerating...</span>
+                <button onclick="cancelRegeneration('${regenKey}')" style="padding:4px 12px;font-size:10px;background:var(--red);color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
               </div>` : ''}
             </div>
             <button class="regen-btn" onclick="regenerateImage('${img.type}', ${img.index})" ${isRegenerating ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}><span style="margin-right:4px;">⟳</span>Regen</button>
@@ -938,6 +984,14 @@ async function runStage(stage, extraParams = {}) {
     else if (stage === 'charsheet') {
       if (!S.gen.bookId) { alert('Generate story first'); S.gen.stages.charsheet='pending'; render(); return; }
 
+      // Start progress timer
+      S.gen.progressStart = Date.now();
+      S.gen.progressElapsed = 0;
+      S.gen.progressTimer = setInterval(() => {
+        S.gen.progressElapsed = Math.floor((Date.now() - S.gen.progressStart) / 1000);
+        updateProgressDisplay('gen');
+      }, 1000);
+
       // Use SSE for character sheet generation
       const charsheetPayload = { book_id: S.gen.bookId, ...extraParams };
       await new Promise((resolve, reject) => {
@@ -952,6 +1006,8 @@ async function runStage(stage, extraParams = {}) {
           function read() {
             reader.read().then(({done, value}) => {
               if (done) {
+                // Stop progress timer
+                if (S.gen.progressTimer) { clearInterval(S.gen.progressTimer); S.gen.progressTimer = null; }
                 resolve();
                 return;
               }
@@ -969,10 +1025,18 @@ async function runStage(stage, extraParams = {}) {
                       S.gen.characterSheet = data.image_path;
                       S.gen.stages.charsheet = 'done';
                       S.gen.log.push(`[${new Date().toLocaleTimeString()}] Character sheet ready for approval`);
+                      // Stop progress timer
+                      if (S.gen.progressTimer) { clearInterval(S.gen.progressTimer); S.gen.progressTimer = null; }
                     }
 
                     if (data.stage === 'charsheet_error') {
                       S.gen.stages.charsheet = 'error';
+                      // Stop progress timer
+                      if (S.gen.progressTimer) { clearInterval(S.gen.progressTimer); S.gen.progressTimer = null; }
+                      // Check for moderation block
+                      if (data.message && data.message.includes('moderation')) {
+                        S.gen.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Content blocked by safety filter - try different guidance text`);
+                      }
                       reject(new Error(data.message));
                       return;
                     }
@@ -982,7 +1046,10 @@ async function runStage(stage, extraParams = {}) {
                 }
               }
               read();
-            }).catch(reject);
+            }).catch(err => {
+              if (S.gen.progressTimer) { clearInterval(S.gen.progressTimer); S.gen.progressTimer = null; }
+              reject(err);
+            });
           }
           read();
         }).catch(reject);
@@ -1240,17 +1307,27 @@ async function regenerateImage(imageType, sceneIndex) {
 
   if (!confirm(`Regenerate the ${imageType === 'spread' ? 'Scene ' + sceneIndex : imageType.replace('_', ' ')} image?`)) return;
 
+  // Create AbortController for this regeneration
+  const abortController = new AbortController();
+  S.regenAbortControllers[regenKey] = abortController;
+
   // Mark as regenerating
   S.regenerating[regenKey] = true;
   S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${imageType}...`);
   render();
 
   try {
-    const r = await api('/api/regenerate-image', {
-      book_id: S.gen.bookId,
-      image_type: imageType,
-      scene_index: sceneIndex
+    const response = await fetch('/api/regenerate-image', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        book_id: S.gen.bookId,
+        image_type: imageType,
+        scene_index: sceneIndex
+      }),
+      signal: abortController.signal
     });
+    const r = await response.json();
 
     if (r.ok) {
       S.gen.log.push(`[${new Date().toLocaleTimeString()}] ${imageType} regenerated successfully`);
@@ -1265,13 +1342,25 @@ async function regenerateImage(imageType, sceneIndex) {
       throw new Error(r.error || 'Regeneration failed');
     }
   } catch(e) {
-    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
-    alert('Regeneration failed: ' + e.message);
+    if (e.name === 'AbortError') {
+      S.gen.log.push(`[${new Date().toLocaleTimeString()}] ⏹️ ${imageType} regeneration cancelled`);
+    } else {
+      S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
+      alert('Regeneration failed: ' + e.message);
+    }
   }
 
-  // Clear regenerating state
+  // Clear regenerating state and abort controller
   delete S.regenerating[regenKey];
+  delete S.regenAbortControllers[regenKey];
   render();
+}
+
+function cancelRegeneration(regenKey) {
+  if (S.regenAbortControllers[regenKey]) {
+    S.regenAbortControllers[regenKey].abort();
+    S.gen.log.push(`[${new Date().toLocaleTimeString()}] ⏹️ Cancellation requested for ${regenKey}...`);
+  }
 }
 
 async function loadDemoStory() {
@@ -1410,7 +1499,7 @@ function vColoringBrief() {
       <h3>Art Style</h3>
       <div class="field">
         <label>Page Style</label>
-        <select id="coloringStyle">
+        <select id="coloringStyle" onchange="handleStyleChange()">
           <option value="zentangle" ${(cb.style||'')==='zentangle'?'selected':''}>Zentangle — Intricate repeating patterns, meditative</option>
           <option value="mandala" ${(cb.style||'')==='mandala'?'selected':''}>Mandala — Circular symmetrical designs</option>
           <option value="bold-easy" ${(cb.style||'bold-easy')==='bold-easy'?'selected':''}>Bold & Easy — Thick simple lines, great for beginners</option>
@@ -1421,9 +1510,18 @@ function vColoringBrief() {
           <option value="kawaii" ${(cb.style||'')==='kawaii'?'selected':''}>Kawaii/Cute — Adorable Japanese-inspired style</option>
           <option value="stained-glass" ${(cb.style||'')==='stained-glass'?'selected':''}>Stained Glass — Bold outlines with mosaic-like sections</option>
           <option value="doodle" ${(cb.style||'')==='doodle'?'selected':''}>Doodle Art — Freeform, spontaneous, hand-drawn feel</option>
+          <option value="custom" ${(cb.style||'')==='custom'?'selected':''}>✏️ Custom — Describe your own style</option>
         </select>
         <div class="hint">This determines the overall artistic look of your coloring pages</div>
       </div>
+      ${(cb.style === 'custom' || v('coloringStyle') === 'custom') ? `
+      <div class="field" style="margin-top:12px;">
+        <label>Custom Style Description</label>
+        <textarea id="coloringCustomStyle" rows="3" placeholder="Describe your desired art style, e.g.: Vintage botanical illustration style with delicate cross-hatching, Victorian-era scientific drawing aesthetic..."
+                  style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;color:var(--text);font-size:13px;">${cb.customStyle || ''}</textarea>
+        <div class="hint">Be specific about line weight, patterns, textures, artistic influences, etc.</div>
+      </div>
+      ` : ''}
     </div>
 
     <div class="card">
@@ -1519,6 +1617,11 @@ async function generateColoringTitle() {
   btn.disabled = false;
 }
 
+function handleStyleChange() {
+  S.coloring.brief.style = v('coloringStyle') || 'bold-easy';
+  render();
+}
+
 async function saveColoringBrief() {
   const cb = S.coloring.brief;
   cb.title = v('coloringTitle') || `${v('coloringTheme')} Coloring Book`;
@@ -1530,9 +1633,13 @@ async function saveColoringBrief() {
   cb.bookSize = v('coloringBookSize');
   cb.notes = v('coloringNotes');
   cb.style = v('coloringStyle') || 'bold-easy';
+  cb.customStyle = v('coloringCustomStyle') || '';
 
   // Use custom theme if selected
   const effectiveTheme = cb.theme === 'Custom' ? cb.themeCustom : cb.theme;
+
+  // Use custom style description if custom is selected
+  const effectiveStyle = cb.style === 'custom' ? cb.customStyle : cb.style;
 
   try {
     const r = await api('/api/coloring/brief', {
@@ -1543,7 +1650,7 @@ async function saveColoringBrief() {
       numPages: cb.numPages,
       bookSize: cb.bookSize,
       notes: cb.notes,
-      style: cb.style
+      style: effectiveStyle
     });
 
     if (r.ok) {
@@ -1591,10 +1698,29 @@ function vColoringReference() {
         </div>
       ` : `
         <div style="text-align:center;padding:40px;">
-          <p style="color:var(--dim);margin-bottom:16px;">Click below to generate your reference style sheet.</p>
-          <button class="btn btn-primary" onclick="generateReference()" ${S.coloring.stages.reference==='running'?'disabled':''}>
-            ${S.coloring.stages.reference==='running' ? '<span class="spinner"></span> Generating...' : 'Generate Style Sheet'}
-          </button>
+          ${S.coloring.stages.reference==='running' ? `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+              <div class="spinner" style="width:24px;height:24px;"></div>
+              <span style="color:var(--text);font-weight:500;">Generating style sheet...</span>
+
+              <div style="width:100%;max-width:300px;">
+                <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden;">
+                  <div id="progress-bar" style="background:var(--accent);height:100%;width:${Math.min(95, (S.coloring.progressElapsed / 60) * 100)}%;transition:width 1s ease;"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--dim);">
+                  <span id="progress-time">${S.coloring.progressElapsed}s elapsed</span>
+                  <span>~45-60s typical</span>
+                </div>
+              </div>
+
+              <p style="font-size:11px;color:var(--dim);text-align:center;max-width:280px;">
+                Creating reference sheet + generating ${S.coloring.brief.numPages || 24} unique page concepts...
+              </p>
+            </div>
+          ` : `
+            <p style="color:var(--dim);margin-bottom:16px;">Click below to generate your reference style sheet.</p>
+            <button class="btn btn-primary" onclick="generateReference()">Generate Style Sheet</button>
+          `}
         </div>
       `}
     </div>
@@ -1624,6 +1750,14 @@ function vColoringReference() {
 async function generateReference() {
   if (!S.coloring.bookId) { alert('Save brief first'); return; }
 
+  // Start progress timer
+  S.coloring.progressStart = Date.now();
+  S.coloring.progressElapsed = 0;
+  S.coloring.progressTimer = setInterval(() => {
+    S.coloring.progressElapsed = Math.floor((Date.now() - S.coloring.progressStart) / 1000);
+    updateProgressDisplay('coloring');
+  }, 1000);
+
   S.coloring.stages.reference = 'running';
   S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating reference sheet...`);
   render();
@@ -1631,17 +1765,23 @@ async function generateReference() {
   try {
     const r = await api('/api/coloring/reference', { book_id: S.coloring.bookId });
 
+    // Stop progress timer
+    if (S.coloring.progressTimer) { clearInterval(S.coloring.progressTimer); S.coloring.progressTimer = null; }
+
     if (r.ok) {
       S.coloring.referenceSheet = r.reference_sheet;
       S.coloring.concepts = r.concepts || [];
       S.coloring.stages.reference = 'done';
-      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Reference sheet generated`);
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Reference sheet generated in ${S.coloring.progressElapsed}s`);
     } else {
       S.coloring.stages.reference = 'error';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Error: ${r.error || 'Generation failed'}`);
       alert('Error: ' + (r.error || 'Generation failed'));
     }
   } catch(e) {
+    if (S.coloring.progressTimer) { clearInterval(S.coloring.progressTimer); S.coloring.progressTimer = null; }
     S.coloring.stages.reference = 'error';
+    S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Failed: ${e.message}`);
     alert('Failed: ' + e.message);
   }
   render();
@@ -1726,6 +1866,7 @@ function vColoringPages() {
               ${isRegenerating ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;">
                 <div class="spinner"></div>
                 <span style="font-size:11px;color:var(--text);background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;">Regenerating...</span>
+                <button onclick="cancelColoringRegeneration(${p.num})" style="padding:4px 12px;font-size:10px;background:var(--red);color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
               </div>` : ''}
             </div>
             <button class="regen-btn" onclick="regenerateColoringPage(${p.num})" style="opacity:1;background:rgba(0,0,0,0.7);${isRegenerating?'cursor:not-allowed;opacity:0.5;':''}" ${isRegenerating?'disabled':''}><span style="margin-right:4px;">⟳</span>Regen</button>
@@ -1839,16 +1980,26 @@ async function regenerateColoringPage(pageNum) {
   // Prevent double-clicking while regenerating
   if (S.coloring.regenerating[pageNum]) return;
 
+  // Create AbortController for this regeneration
+  const abortController = new AbortController();
+  S.regenAbortControllers[`coloring_${pageNum}`] = abortController;
+
   // Mark as regenerating
   S.coloring.regenerating[pageNum] = true;
   S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating page ${pageNum}...`);
   render();
 
   try {
-    const r = await api('/api/coloring/regenerate', {
-      book_id: S.coloring.bookId,
-      page_num: pageNum
+    const response = await fetch('/api/coloring/regenerate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        book_id: S.coloring.bookId,
+        page_num: pageNum
+      }),
+      signal: abortController.signal
     });
+    const r = await response.json();
 
     if (r.ok) {
       const idx = S.coloring.pages.findIndex(p => p.num === pageNum);
@@ -1863,13 +2014,26 @@ async function regenerateColoringPage(pageNum) {
       alert('Error: ' + (r.error || 'Regeneration failed'));
     }
   } catch(e) {
-    S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
-    alert('Failed: ' + e.message);
+    if (e.name === 'AbortError') {
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⏹️ Page ${pageNum} regeneration cancelled`);
+    } else {
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ERROR: ${e.message}`);
+      alert('Failed: ' + e.message);
+    }
   }
 
-  // Clear regenerating state
+  // Clear regenerating state and abort controller
   delete S.coloring.regenerating[pageNum];
+  delete S.regenAbortControllers[`coloring_${pageNum}`];
   render();
+}
+
+function cancelColoringRegeneration(pageNum) {
+  const key = `coloring_${pageNum}`;
+  if (S.regenAbortControllers[key]) {
+    S.regenAbortControllers[key].abort();
+    S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⏹️ Cancellation requested for page ${pageNum}...`);
+  }
 }
 
 // ─── Coloring Step 5: Cover ───

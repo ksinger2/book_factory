@@ -275,69 +275,54 @@ Now generate {num_pages} unique concepts for "{brief.theme}":"""
         age_specs = self._get_age_specs(brief.age_level)
         theme_guidelines = self._get_theme_guidelines(brief.theme)
         difficulty_mod = self._get_difficulty_mod(brief.difficulty)
+
+        # Debug logging for style
+        logger.info(f"=== STYLE DEBUG ===")
+        logger.info(f"brief.style value: '{brief.style}'")
+        logger.info(f"Available styles: {list(ART_STYLES.keys())}")
+
         art_style = ART_STYLES.get(brief.style, ART_STYLES["bold-easy"])
 
-        # Build the prompt
-        prompt = f"""Generate a COLORING BOOK REFERENCE/STYLE SHEET showing the unified visual style for this book.
+        logger.info(f"Resolved art_style: '{art_style[:50]}...'")
+        logger.info(f"=== END STYLE DEBUG ===")
 
-BOOK SPECIFICATIONS:
-- Theme: {brief.theme}
+        # Build the prompt with STRONG theme emphasis
+        prompt = f"""*** THEME IS EVERYTHING - READ THIS FIRST ***
+Create a coloring book reference sheet for the theme: "{brief.theme}"
+
+EVERY SINGLE ELEMENT ON THIS PAGE MUST BE DIRECTLY RELATED TO: {brief.theme}
+DO NOT include mandalas, geometric patterns, or generic designs.
+ONLY include objects, items, and scenes that match "{brief.theme}" exactly.
+
+=== WHAT TO DRAW ===
+Draw 4-6 different {brief.theme}-related items arranged on the page:
+- Each item must be something you would see in a "{brief.theme}" context
+- Examples of {brief.theme} items: things directly associated with {brief.theme}
+- NO abstract patterns, NO mandalas, NO geometric shapes unless the theme specifically requires them
+- Each element should be a recognizable object related to {brief.theme}
+
+=== ART STYLE ===
+{art_style}
+
+=== TECHNICAL SPECS ===
 - Age Level: {brief.age_level} ({age_specs['description']})
 - Difficulty: {brief.difficulty}
-
-*** ART STYLE - THIS IS CRITICAL ***
-{art_style}
-Apply this artistic style to ALL elements on the reference sheet.
-
-LINE SPECIFICATIONS:
 - Line Weight: {age_specs['line_weight']}
-- Complexity: {age_specs['planes']} (modified by {difficulty_mod['description']})
+- Complexity: {age_specs['planes']}
 - Coloring Areas: {age_specs['areas']}
-- Content Style: {age_specs['content']}
-
-THEME GUIDELINES:
-{theme_guidelines}
 
 {f"ADDITIONAL NOTES: {brief.notes}" if brief.notes else ""}
 
-REFERENCE SHEET LAYOUT:
-Create a clean arrangement showing 4-6 example elements on a pure white background:
-1. MAIN ELEMENT: Primary subject representing the theme (largest, center-top)
-2. SECONDARY ELEMENT: Supporting object or creature (medium size)
-3. BORDER/FRAME SAMPLE: Decorative border or frame pattern
-4. BACKGROUND PATTERN: Fill texture or pattern sample
-5. DECORATIVE ELEMENT: Small accent piece (optional)
-6. DETAIL ELEMENT: Fine detail example (optional)
+=== ABSOLUTE REQUIREMENTS ===
+1. PURE BLACK LINES on WHITE background ONLY - no colors, no gray, no shading
+2. ALL shapes must be CLOSED - every line connects to form fillable areas
+3. NO text, NO labels, NO words, NO numbers, NO writing
+4. NO watermarks, NO signatures
+5. NOTHING touches any edge - 5% margin minimum on ALL sides
+6. ALL elements 100% complete - no cropping
+7. ZERO random dots or specks - perfectly clean white background
 
-CRITICAL REQUIREMENTS - ABSOLUTELY MUST FOLLOW:
-1. PURE BLACK LINES on WHITE background ONLY
-2. NO colors, gradients, shading, or gray tones whatsoever
-3. ALL shapes must be CLOSED - every line connects to form fillable areas
-4. Line weight must be EXACTLY {age_specs['line_weight']}
-5. Consistent style across ALL elements
-6. Clean line intersections where lines meet
-7. NO text, NO labels, NO words, NO numbers, NO writing of any kind
-8. NO watermarks, NO signatures
-9. Professional print-ready quality at 300 DPI
-10. NO random dots, specks, or stray marks anywhere
-11. ALL elements must be FULLY CONTAINED within the page
-12. NOTHING touching or cut off at page edges - clear margins around everything
-
-LAYOUT REQUIREMENTS:
-- Clean white background with NO artifacts
-- Clear separation between elements
-- Balanced composition with margins on all sides
-- Each element clearly visible as a standalone sample
-- Uniform visual language across all samples
-- NO elements touching or bleeding off the edges
-
-This reference sheet establishes the visual style for all pages.
-
-IMPORTANT - PAGES WILL USE THESE EXACT SPECIFICATIONS:
-- Line Weight: EXACTLY {age_specs['line_weight']}
-- Complexity: {age_specs['planes']} (adjusted for {brief.difficulty} difficulty)
-- Style: Pure MATTE black lines only - NO shine, NO gloss, NO 3D effects
-- All pages in the book will match this reference precisely."""
+REMEMBER: This is a "{brief.theme}" coloring book. Every element must match that theme."""
 
         logger.info(f"Generating reference sheet: {brief.theme}, {brief.age_level}, {brief.difficulty}")
 
