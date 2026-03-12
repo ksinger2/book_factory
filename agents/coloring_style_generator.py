@@ -83,6 +83,9 @@ THEME_GUIDELINES = {
     "food": "Rounded appetizing shapes, texture details, playful arrangements",
     "holidays": "Season-appropriate elements, festive decorations, themed objects",
     "quotes": "Typography-friendly layouts, decorative borders, frame elements",
+    "insects": "Detailed wing patterns, segmented body structure, antennae and leg details",
+    "bugs": "Detailed wing patterns, segmented body structure, antennae and leg details",
+    "birds": "Feather texture patterns, wing details, expressive poses",
     "custom": "Follow the specific theme description provided"
 }
 
@@ -185,16 +188,30 @@ class ColoringStyleGenerator:
         """Get difficulty modifier."""
         return DIFFICULTY_MODS.get(difficulty.lower(), DIFFICULTY_MODS["medium"])
 
-    def _generate_concepts_with_llm(self, brief: StyleBrief, num_pages: int) -> list:
+    def _generate_concepts_with_llm(self, brief: StyleBrief, num_pages: int, exclusion_list: str = "") -> list:
         """
         Use LLM to generate diverse, unique concepts for coloring book pages.
         Each concept should be completely different from the others.
+
+        Args:
+            brief: StyleBrief with theme and specifications
+            num_pages: Number of concepts to generate
+            exclusion_list: Comma-separated list of subjects already used (to avoid)
         """
         try:
             from openai import OpenAI
             client = OpenAI()
 
-            prompt = f"""Generate {num_pages} COMPLETELY DIFFERENT and UNIQUE coloring page concepts for a "{brief.theme}" themed coloring book.
+            prompt = f"""Generate {num_pages} coloring page concepts for "{brief.theme}" theme.
+
+CRITICAL: Each page MUST have a DIFFERENT primary subject.
+- Page 1: butterfly, Page 2: ladybug, Page 3: dragonfly (GOOD - all different)
+- Page 1: butterfly, Page 2: butterfly flying, Page 3: butterfly on flower (BAD - all butterflies!)
+
+For "{brief.theme}", list {num_pages} DIFFERENT subjects, one per line.
+Each line: [subject] [action/pose] [simple setting]
+
+FORBIDDEN subjects (already used): {exclusion_list if exclusion_list else "None yet"}
 
 REQUIREMENTS:
 - Each concept must be a DIFFERENT subject/scene (not variations of the same thing)
@@ -243,12 +260,77 @@ Now generate {num_pages} unique concepts for "{brief.theme}":"""
                 if cleaned and len(cleaned) > 5:
                     concepts.append(cleaned)
 
+            # Validate uniqueness
+            if not self._validate_unique_subjects(concepts):
+                logger.warning("Generated concepts have duplicate subjects, regenerating...")
+                # Try once more with stricter prompt
+                concepts = self._generate_concepts_strict(brief, num_pages, exclusion_list)
+
             logger.info(f"LLM generated {len(concepts)} concepts for theme: {brief.theme}")
             return concepts
 
         except Exception as e:
             logger.warning(f"LLM concept generation error: {e}")
             raise
+
+    def _extract_subject(self, concept: str) -> str:
+        """Extract primary subject from concept string."""
+        # Get the first 1-2 meaningful words (skip articles, adjectives)
+        skip_words = {'a', 'an', 'the', 'large', 'small', 'big', 'tiny', 'cute', 'beautiful',
+                      'majestic', 'friendly', 'happy', 'single', 'one', 'two', 'decorated'}
+        words = concept.lower().split()
+        for word in words:
+            # Remove punctuation
+            clean_word = ''.join(c for c in word if c.isalnum())
+            if clean_word and clean_word not in skip_words and len(clean_word) > 2:
+                return clean_word
+        return words[0] if words else "unknown"
+
+    def _validate_unique_subjects(self, concepts: list) -> bool:
+        """Check that all concepts have different primary subjects."""
+        subjects = [self._extract_subject(c) for c in concepts]
+        unique_subjects = set(subjects)
+        # Allow some overlap (80% unique is acceptable)
+        uniqueness_ratio = len(unique_subjects) / len(subjects) if subjects else 0
+        return uniqueness_ratio >= 0.8
+
+    def _generate_concepts_strict(self, brief: StyleBrief, num_pages: int, exclusion_list: str = "") -> list:
+        """Generate concepts with stricter uniqueness enforcement."""
+        from openai import OpenAI
+        client = OpenAI()
+
+        prompt = f"""Generate {num_pages} coloring page concepts for "{brief.theme}".
+
+STRICT UNIQUENESS RULE: Each line MUST start with a DIFFERENT noun.
+NO repetition of any subject - each page shows a completely different thing.
+
+Format: [unique subject noun] [action] [setting]
+
+{f"DO NOT use these subjects (already used): {exclusion_list}" if exclusion_list else ""}
+
+Generate exactly {num_pages} lines, one concept per line:"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1000,
+            temperature=0.9
+        )
+
+        content = response.choices[0].message.content
+        lines = content.strip().split('\n')
+        concepts = []
+        import re
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            cleaned = re.sub(r'^[\d]+[\.\)\-\s]+', '', line).strip()
+            cleaned = re.sub(r'^[-\*\s]+', '', cleaned).strip()
+            if cleaned and len(cleaned) > 5:
+                concepts.append(cleaned)
+
+        return concepts[:num_pages]
 
     def generate_reference_sheet(
         self,

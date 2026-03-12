@@ -1102,6 +1102,12 @@ def api_coloring_brief():
         if not brief:
             return jsonify({"ok": False, "error": "No brief provided"}), 400
 
+        # Validate theme is not empty
+        theme = brief.get('theme', '').strip()
+        if not theme:
+            return jsonify({"ok": False, "error": "Theme is required"}), 400
+        brief['theme'] = theme
+
         # Create book directory in ColoringBook subdirectory
         title = brief.get('title', 'Coloring Book')
         safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
@@ -1149,9 +1155,11 @@ def api_coloring_reference():
         log.info(f"brief_data['style']: {brief_data.get('style', 'NOT FOUND - defaulting to bold-easy')}")
         log.info(f"=== END DEBUG ===")
 
-        # Create style brief
+        # Create style brief with fallback for empty theme
+        theme = brief_data.get('theme', '').strip() or 'General'
+
         style_brief = StyleBrief(
-            theme=brief_data.get('theme', 'General'),
+            theme=theme,
             age_level=brief_data.get('ageLevel', 'adult'),
             difficulty=brief_data.get('difficulty', 'medium'),
             notes=brief_data.get('notes', ''),
@@ -1290,6 +1298,20 @@ def api_coloring_pages():
             "failed_pages": []
         }
 
+        # Track generated subjects for uniqueness enforcement
+        generated_subjects = []
+
+        def extract_subject(concept_str):
+            """Extract primary subject from concept string."""
+            skip_words = {'a', 'an', 'the', 'large', 'small', 'big', 'tiny', 'cute', 'beautiful',
+                          'majestic', 'friendly', 'happy', 'single', 'one', 'two', 'decorated'}
+            words = concept_str.lower().split()
+            for word in words:
+                clean_word = ''.join(c for c in word if c.isalnum())
+                if clean_word and clean_word not in skip_words and len(clean_word) > 2:
+                    return clean_word
+            return words[0] if words else "unknown"
+
         for i in range(num_pages):
             # Check for cancellation
             if book_id in cancelled_jobs:
@@ -1309,7 +1331,8 @@ def api_coloring_pages():
                 age_level=age_level,
                 difficulty=difficulty,
                 style=style,
-                notes=notes
+                notes=notes,
+                previous_subjects=generated_subjects.copy()
             )
 
             output_path = pages_dir / f"page_{page_num:02d}.png"
@@ -1339,6 +1362,8 @@ def api_coloring_pages():
 
                     if qa_result.passed:
                         qa_passed = True
+                        # Track this subject for uniqueness in subsequent pages
+                        generated_subjects.append(extract_subject(concept))
                         results["pages"].append({
                             "page_num": page_num,
                             "path": str(path),
@@ -1408,6 +1433,19 @@ def api_coloring_regenerate():
         notes = brief_data.get('notes', '')
         concept = concepts[page_num - 1] if page_num <= len(concepts) else f"{theme} design {page_num}"
 
+        # Get previous subjects from other pages for uniqueness
+        previous_subjects = []
+        for idx, c in enumerate(concepts):
+            if idx != page_num - 1:  # Exclude current page
+                # Extract subject from concept
+                skip_words = {'a', 'an', 'the', 'large', 'small', 'big', 'tiny', 'cute'}
+                words = c.lower().split()
+                for word in words:
+                    clean_word = ''.join(ch for ch in word if ch.isalnum())
+                    if clean_word and clean_word not in skip_words and len(clean_word) > 2:
+                        previous_subjects.append(clean_word)
+                        break
+
         config = PageConfig(
             page_num=page_num,
             concept=concept,
@@ -1415,7 +1453,8 @@ def api_coloring_regenerate():
             age_level=age_level,
             difficulty=difficulty,
             style=style,
-            notes=notes
+            notes=notes,
+            previous_subjects=previous_subjects
         )
 
         pages_dir = book_dir / "pages"

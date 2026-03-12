@@ -1483,7 +1483,7 @@ function vColoringBrief() {
       ${isCustomTheme ? `
       <div class="field">
         <label>Custom Theme Description</label>
-        <input id="coloringThemeCustom" value="${cb.themeCustom}" placeholder="Describe your theme..."/>
+        <input id="coloringThemeCustom" value="${cb.themeCustom}" placeholder="Describe your theme..." oninput="S.coloring.brief.themeCustom = this.value"/>
       </div>` : ''}
       <div class="field">
         <label>Title</label>
@@ -1585,6 +1585,9 @@ function vColoringBrief() {
 }
 
 function updateColoringTheme() {
+  // Preserve custom theme value before re-render
+  const customInput = document.getElementById('coloringThemeCustom');
+  if (customInput) S.coloring.brief.themeCustom = customInput.value;
   S.coloring.brief.theme = v('coloringTheme');
   render();
 }
@@ -1637,6 +1640,12 @@ async function saveColoringBrief() {
 
   // Use custom theme if selected
   const effectiveTheme = cb.theme === 'Custom' ? cb.themeCustom : cb.theme;
+
+  // Validate theme is not empty
+  if (!effectiveTheme || !effectiveTheme.trim()) {
+    alert('Please enter a theme.');
+    return;
+  }
 
   // Use custom style description if custom is selected
   const effectiveStyle = cb.style === 'custom' ? cb.customStyle : cb.style;

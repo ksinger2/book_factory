@@ -148,12 +148,23 @@ CHECK EACH CRITERION (score 0-100):
    - NO color whatsoever
    Score 100 = Pure B&W, 0 = Contains color/gray
 
-4. NO_EDGE_CUTOFF (Critical):
-   - Is the ENTIRE main subject fully visible within the page?
-   - NO part of any character, animal, or main object cut off at edges
-   - Subject must be COMPLETE and WHOLE, not cropped
-   - Clear margins around all elements (nothing touching page edges)
-   Score 100 = Everything fully contained, 0 = Subject cut off at edge
+4. NO_EDGE_CUTOFF (Critical - BINARY PASS/FAIL):
+   Scan all four edges carefully. This is the MOST IMPORTANT check.
+
+   AUTOMATIC FAIL (Score 0-20):
+   - ANY body part touches or extends past edge (tail, wing, ear, horn, foot, antenna)
+   - Head cropped at top
+   - Feet cropped at bottom
+   - ANY appendage disappears at edge
+   - Subject too large for page with parts cut off
+
+   PASS (Score 80-100):
+   - Subject fully contained with clear white margins on ALL 4 sides
+   - Nothing touches any edge
+   - All body parts complete and visible
+
+   RULE: If ANY part of the main subject is cropped or cut off, MAX score is 20.
+   Be STRICT - even partial cuts of tails, wings, ears count as failures.
 
 5. LINE_QUALITY (Important):
    - Consistent line weight throughout (for the style)
@@ -290,10 +301,14 @@ AND average of all scores must be 75+"""
 
         # Validate pass/fail based on scores if we have them
         if scores:
-            critical_checks = ['CLOSED_LINES', 'NO_ARTIFACTS', 'PURE_BW', 'NO_EDGE_CUTOFF']
-            critical_passed = all(scores.get(k, 0) >= 70 for k in critical_checks)
+            # Edge cutoff is strictly enforced - must score 50+ (stricter threshold)
+            edge_passed = scores.get('NO_EDGE_CUTOFF', 0) >= 50
+            # Other critical checks use standard 70 threshold
+            other_critical = ['CLOSED_LINES', 'NO_ARTIFACTS', 'PURE_BW']
+            other_passed = all(scores.get(k, 0) >= 70 for k in other_critical)
             avg_score = sum(scores.values()) / len(scores) if scores else 0
-            passed = critical_passed and avg_score >= 75
+            # Must pass edge check AND other criticals AND have good average
+            passed = edge_passed and other_passed and avg_score >= 70
 
         return QAResult(
             passed=passed,

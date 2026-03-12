@@ -10,8 +10,8 @@ import base64
 import logging
 import time
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
-from dataclasses import dataclass
+from typing import Optional, Tuple, Dict, Any, List
+from dataclasses import dataclass, field
 
 try:
     from openai import OpenAI, RateLimitError
@@ -97,6 +97,9 @@ THEME_GUIDELINES = {
     "food": "Rounded appetizing shapes, texture details, playful arrangements",
     "holidays": "Season-appropriate elements, festive decorations, themed objects",
     "quotes": "Typography-friendly layouts, decorative borders, frame elements",
+    "insects": "Detailed wing patterns, segmented body structure, antennae and leg details",
+    "bugs": "Detailed wing patterns, segmented body structure, antennae and leg details",
+    "birds": "Feather texture patterns, wing details, expressive poses",
     "custom": "Follow the specific theme description provided"
 }
 
@@ -126,6 +129,7 @@ class PageConfig:
     difficulty: str
     notes: str = ""
     style: str = "bold-easy"
+    previous_subjects: List[str] = field(default_factory=list)
 
 
 class ColoringPageGenerator:
@@ -231,29 +235,42 @@ class ColoringPageGenerator:
         calculated_complexity = self._calculate_complexity(config.age_level, config.difficulty)
         art_style = ART_STYLES.get(config.style, ART_STYLES["bold-easy"])
 
-        # Build the prompt
-        prompt = f"""Generate a UNIQUE coloring book page featuring: {config.concept}
+        # Build the prompt with safe zone framing FIRST
+        prompt = f"""Generate a coloring book page for: {config.concept}
 
-*** MAIN SUBJECT - THIS IS THE FOCUS OF THE PAGE ***
+*** CRITICAL - SAFE ZONE FRAMING - READ FIRST ***
+- Draw ENTIRE subject within the INNER 80% of canvas
+- 10% invisible margin on ALL edges - NOTHING enters this zone
+- Subject must be FULLY VISIBLE: head, tail, wings, limbs - ALL parts complete
+- If too large, SHRINK IT to fit completely
+
+FAILURE EXAMPLES TO AVOID:
+- Dragon with tail cut off at edge
+- Unicorn with horn cropped at top
+- Character missing feet at bottom
+- Wings extending past side edges
+- Butterfly antenna touching top edge
+- Fish tail disappearing at bottom
+
+COMPOSITION CHECK (verify ALL before drawing):
+✓ Can I see the TOP of the subject? If NO → shrink
+✓ Can I see the BOTTOM? If NO → shrink
+✓ Can I see LEFT and RIGHT edges completely? If NO → shrink
+✓ Is there clear white space between subject and ALL 4 edges? If NO → shrink
+
+*** MAIN SUBJECT ***
 Draw: {config.concept}
-This specific subject must be the CENTRAL FOCUS of the entire page.
-DO NOT draw anything else as the main subject - only "{config.concept}"
+Size: 50-70% of the SAFE ZONE (not the whole page)
+Position: CENTERED with generous margins all around
 
 *** ART STYLE ***
 {art_style}
-Apply this artistic style to the entire page.
 
-PAGE UNIQUENESS REQUIREMENT:
-- This is page {config.page_num} in a coloring book
-- This page MUST look COMPLETELY DIFFERENT from all other pages
-- The subject "{config.concept}" is UNIQUE to this page
-- DO NOT repeat elements from other pages
-- Create a fresh, distinct composition for this specific subject
-
-WHAT TO DRAW:
-- Main subject: {config.concept} (takes up 60-80% of the page)
-- Simple complementary background elements that don't distract
-- The composition should highlight "{config.concept}" as the star
+*** UNIQUENESS - DO NOT REPEAT ***
+Already used in this book: {', '.join(config.previous_subjects) if config.previous_subjects else 'None yet'}
+Your subject "{config.concept}" must look COMPLETELY DIFFERENT from above.
+- Page {config.page_num} in a coloring book
+- Create a fresh, distinct composition unlike any previous page
 
 LINE STYLE (match reference sheet):
 - Line Weight: {age_specs['line_weight']}
@@ -266,27 +283,19 @@ TECHNICAL REQUIREMENTS:
 1. PURE BLACK LINES on WHITE background ONLY
 2. NO colors, gradients, shading, or gray tones
 3. ALL shapes must be CLOSED - no open-ended lines
-4. Line weight: {age_specs['line_weight']}
-5. NO text, labels, or writing
-6. NO watermarks or signatures
-7. Matte black lines only - no shine or gloss effects
+4. NO text, labels, or writing
+5. NO watermarks or signatures
+6. ZERO random dots, specks, or stray marks
+7. Background must be PERFECTLY clean pure white
 
-*** ABSOLUTE REQUIREMENTS - VIOLATIONS WILL FAIL QA ***
+*** FINAL CHECK - MANDATORY ***
+Before outputting, verify:
+□ The ENTIRE {config.concept} is 100% visible
+□ NO part of the subject touches ANY edge
+□ Clear white margin visible on all 4 sides
+□ If ANY part would be cut off, you made it SMALLER
 
-EDGE RULES (CRITICAL - MUST FOLLOW):
-8. NOTHING may touch or extend beyond ANY edge of the page - top, bottom, left, or right
-9. ALL subjects (animals, objects, characters) must be 100% COMPLETE and WHOLE
-10. NO cropping, cutting off, or partial views of ANY element
-11. Maintain AT LEAST 5% margin on ALL sides - nothing in the outer border zone
-12. If it doesn't fit completely, make it SMALLER - never crop it
-
-CLEANLINESS RULES (CRITICAL):
-13. ZERO random dots, specks, spots, or stray marks anywhere
-14. Background must be PERFECTLY clean pure white
-15. No artifacts, smudges, or unintentional marks of any kind
-16. Every mark on the page must be intentional linework
-
-OUTPUT: A single coloring page featuring "{config.concept}" as the main subject. The ENTIRE subject must be fully contained within the page with clear margins on all sides. Nothing cut off."""
+OUTPUT: Single coloring page with "{config.concept}" fully contained, clear margins on ALL sides."""
 
         logger.info(f"Generating page {config.page_num}: {config.concept[:50]}...")
 
