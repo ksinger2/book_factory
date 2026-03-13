@@ -1,13 +1,36 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-12 21:30
-> **Session ID:** session-20260312d
+> **Last Updated:** 2026-03-13 01:25
+> **Session ID:** session-20260313a
 
 ---
 
 ## Latest Changes (This Session)
 
-### Cost Optimization (2026-03-12 Evening) - MAJOR
+### Draft Mode Toggle (2026-03-13) - COST SAVINGS
+Added UI toggle for draft mode to dramatically reduce testing costs:
+
+#### Features
+- **Toggle switch** on coloring book brief page (Cost Mode card)
+- **Draft mode:** Uses dall-e-2 (~$0.02/image) - ~$0.50/book
+- **Production mode:** Uses gpt-image-1 (~$0.05/image) - ~$2.50/book
+
+#### Files Modified
+- `agents/coloring_style_generator.py` - Added `draft_mode` parameter, uses dall-e-2 in draft mode
+- `agents/coloring_page_generator.py` - Added `draft_mode` parameter, uses dall-e-2 with standard quality
+- `agents/coloring_cover_generator.py` - Added `draft_mode` parameter
+- `run.py` - All coloring endpoints now accept and pass `draft_mode`
+- `dashboard.html` - Toggle UI, CSS for switch, passes `draft_mode` to all coloring API calls
+
+#### API Endpoints Updated
+- `/api/coloring/reference` - accepts draft_mode
+- `/api/coloring/pages` - accepts draft_mode
+- `/api/coloring/regenerate` - accepts draft_mode
+- `/api/coloring/cover` - accepts draft_mode
+
+---
+
+### Previous: Cost Optimization (2026-03-12 Evening) - MAJOR
 Reduced image generation costs by 75-85% (~$20/day → $3-5/day):
 
 #### Retry Bug Fixes
@@ -118,15 +141,20 @@ Critical fixes for theme handling, page uniqueness, and edge cutoff issues:
 
 ### Coloring Book Agents (UPDATED)
 **Domain:** Coloring book generation pipeline
-**Status:** READY - Major fixes applied
+**Status:** READY - Cost optimized with draft mode
 
 **Components:**
 - `coloring_style_generator.py` - Reference sheet + concept generation with uniqueness validation
 - `coloring_page_generator.py` - Individual page generation with safe zone framing + previous subjects tracking
 - `coloring_cover_generator.py` - Cover generation
-- `coloring_qa_checker.py` - GPT-4o vision-based quality validation with strict edge checking
+- `coloring_qa_checker.py` - GPT-4o-mini vision-based quality validation with strict edge checking
 
-**Recent Changes (2026-03-12 PM):**
+**Recent Changes (2026-03-13):**
+- **Draft Mode Toggle:** All generators accept `draft_mode` parameter for cheaper testing
+- **Cost Savings:** Draft mode uses dall-e-2 (~$0.02/image vs ~$0.05/image)
+- **UI Toggle:** Switch on brief page to toggle between draft/production modes
+
+**Previous Changes (2026-03-12 PM):**
 - **Theme Flow Fixed:** Custom theme now preserved during UI interactions, validated on save
 - **Page Uniqueness:** LLM concepts now validated for 80%+ uniqueness, previous subjects passed to each page
 - **Edge Cutoff Prevention:** Safe zone framing in prompts, binary pass/fail QA scoring
@@ -330,6 +358,7 @@ output/
 - **Art quality: medium** (changed from high for cost savings)
 - **Vision QA: gpt-4o-mini** (changed from gpt-4o for cost savings)
 - **QA: first image only** (qa_first_only=True)
+- **Draft mode toggle:** Available in coloring book UI (dall-e-2 vs gpt-image-1)
 - Retries: 3 (fixed off-by-one bug)
 - Pricing: $9.99 paperback, $4.99 eBook
 
