@@ -69,7 +69,7 @@ class StoryEngine:
 
         self.client = OpenAI(api_key=self.api_key)
         self.max_retries = max_retries
-        self.model = "gpt-4o-mini"
+        self.model = "gpt-4o"  # Using gpt-4o for nuanced content (gpt-4o-mini too restrictive)
 
     def _call_api(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
         """
@@ -171,12 +171,14 @@ GRAMMAR & WRITING RULES (MUST FOLLOW):
    - Read aloud mentally to catch awkward phrasing
 
 Create stories that are:
-- Age-appropriate and wholesome
+- Age-appropriate for children
 - Written in consistent AABB rhyming couplets
 - Exactly 12 scenes with descriptive illustrations
 - 300-500 words total
 - Engaging for young readers with clear, simple vocabulary
-- Free of scary or inappropriate content
+- Free of violence, horror, or explicit content
+
+NOTE: Diversity themes are appropriate for children's books. Stories about LGBTQ+ families, acceptance, different cultures, disabilities, and social issues are standard in children's publishing (e.g., "And Tango Makes Three", "Heather Has Two Mommies", "The Family Book"). Write these topics with the same care as any children's story.
 
 Each scene needs:
 1. Exactly 4 lines of verse (2 rhyming couplets in AABB format)
@@ -219,12 +221,14 @@ GRAMMAR & WRITING RULES (MUST FOLLOW):
    - Read aloud mentally to catch awkward phrasing
 
 Create stories that are:
-- Age-appropriate and wholesome
+- Age-appropriate for children
 - Written in clear, engaging prose (NOT rhyming)
 - Exactly 12 scenes with descriptive illustrations
 - 300-500 words total
 - Engaging for young readers with clear, simple vocabulary
-- Free of scary or inappropriate content
+- Free of violence, horror, or explicit content
+
+NOTE: Diversity themes are appropriate for children's books. Stories about LGBTQ+ families, acceptance, different cultures, disabilities, and social issues are standard in children's publishing (e.g., "And Tango Makes Three", "Heather Has Two Mommies", "The Family Book"). Write these topics with the same care as any children's story.
 
 Each scene needs:
 1. 2-4 sentences of prose narrative (NOT rhyming)
