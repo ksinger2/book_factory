@@ -215,6 +215,11 @@ class ColoringPageGenerator:
         self.max_retries = 3
         self.initial_backoff = 30
 
+        # Cost tracking (approximate costs per image at 1024x1024)
+        # gpt-image-1: ~$0.04-0.08 per image
+        # dall-e-2: ~$0.02 per image
+        self.estimated_cost_per_image = 0.05  # Conservative estimate
+
         logger.info(f"ColoringPageGenerator initialized with model: {self.image_model}")
 
     def _image_to_base64(self, image_path: Path) -> str:

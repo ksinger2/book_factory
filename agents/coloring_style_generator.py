@@ -197,7 +197,11 @@ class ColoringStyleGenerator:
                 )
 
         self.client = OpenAI(api_key=api_key)
-        self.image_model = "gpt-image-1"
+        # Model selection for cost optimization:
+        # - dall-e-2: Cheapest (~$0.02/image), use for simple generation without references
+        # - gpt-image-1: More expensive, but needed for images.edit with references
+        self.cheap_model = "dall-e-2"  # For generation without reference
+        self.image_model = "gpt-image-1"  # For edit with reference image
         self.max_retries = 3
         self.initial_backoff = 30
 
@@ -469,18 +473,19 @@ REMEMBER: This is a "{brief.theme}" coloring book. Every element must match that
                             model=self.image_model,
                             image=[ref_file],
                             prompt=prompt,
-                            size="1536x1024"  # Landscape for reference sheet
+                            size="1024x1024"  # Square for reference sheet (dall-e-2 compatible)
                         )
 
                     # Clean up temp file
                     os.unlink(temp_file.name)
                 else:
+                    # Use cheaper dall-e-2 for generation without reference
                     response = self.client.images.generate(
-                        model=self.image_model,
+                        model=self.cheap_model,
                         prompt=prompt,
-                        size="1536x1024",  # Landscape for reference sheet
-                        n=1,
-                        quality="medium"
+                        size="1024x1024",  # dall-e-2 only supports square
+                        n=1
+                        # Note: dall-e-2 doesn't support quality parameter
                     )
 
                 # Save the result
