@@ -47,7 +47,7 @@ class ColoringQAChecker:
     - Age appropriateness (content matches target audience)
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini"):
         """
         Initialize the QA checker.
 

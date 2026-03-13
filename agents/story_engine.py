@@ -69,7 +69,7 @@ class StoryEngine:
 
         self.client = OpenAI(api_key=self.api_key)
         self.max_retries = max_retries
-        self.model = "gpt-4o"
+        self.model = "gpt-4o-mini"
 
     def _call_api(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
         """
@@ -120,7 +120,7 @@ class StoryEngine:
 
     def generate_story(self, brief: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate a complete rhyming children's story with 12 scenes.
+        Generate a complete children's story with 12 scenes.
 
         Args:
             brief: Dictionary with keys like:
@@ -130,11 +130,16 @@ class StoryEngine:
                 - lesson: Life lesson (e.g., "trying new things")
                 - setting: Story setting
                 - tone: Story tone (whimsical, adventurous, etc.)
+                - rhyming: Whether to write in rhyming verse (default True)
 
         Returns:
             Dict with story data including title and 12 scenes
         """
-        system_prompt = """You are an expert children's book author and editor specializing in rhyming stories.
+        # Check if rhyming or prose style
+        is_rhyming = brief.get('rhyming', True)
+
+        if is_rhyming:
+            system_prompt = """You are an expert children's book author and editor specializing in rhyming stories.
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
 1. CAPITALIZATION:
@@ -175,6 +180,54 @@ Create stories that are:
 
 Each scene needs:
 1. Exactly 4 lines of verse (2 rhyming couplets in AABB format)
+2. A vivid illustration prompt for an artist
+3. Composition notes specifying character placement and background
+4. Text position (top-left, center-top, bottom-right, etc.)
+
+Format your response as valid JSON."""
+        else:
+            system_prompt = """You are an expert children's book author and editor specializing in engaging prose stories.
+
+GRAMMAR & WRITING RULES (MUST FOLLOW):
+1. CAPITALIZATION:
+   - Only capitalize the first word of sentences
+   - Only capitalize proper nouns (character names, place names)
+   - NEVER capitalize common words mid-sentence (wrong: "The Happy Penguin", correct: "The happy penguin")
+
+2. PUNCTUATION:
+   - Use exactly ONE punctuation mark at the end of each sentence
+   - NEVER use double punctuation (no ".." or "!!" or "?," or "!.")
+   - Use commas for natural pauses in longer sentences
+   - Use periods, exclamation marks, or question marks appropriately
+
+3. SENTENCE STRUCTURE:
+   - Complete sentences with subject and verb
+   - Simple vocabulary appropriate for ages 3-6
+   - Avoid run-on sentences
+   - Keep sentences short and clear
+
+4. PROSE STYLE:
+   - Write in clear, engaging narrative prose
+   - Use varied sentence lengths for rhythm
+   - Include dialogue where appropriate
+   - Make each scene vivid and action-oriented
+
+5. BEFORE OUTPUTTING - SELF-REVIEW CHECKLIST:
+   - Review EVERY line for grammar errors
+   - Check capitalization of every word - no random capitals
+   - Verify punctuation is correct and not duplicated
+   - Read aloud mentally to catch awkward phrasing
+
+Create stories that are:
+- Age-appropriate and wholesome
+- Written in clear, engaging prose (NOT rhyming)
+- Exactly 12 scenes with descriptive illustrations
+- 300-500 words total
+- Engaging for young readers with clear, simple vocabulary
+- Free of scary or inappropriate content
+
+Each scene needs:
+1. 2-4 sentences of prose narrative (NOT rhyming)
 2. A vivid illustration prompt for an artist
 3. Composition notes specifying character placement and background
 4. Text position (top-left, center-top, bottom-right, etc.)
@@ -241,19 +294,31 @@ CRITICAL USER REQUIREMENTS - YOU MUST FOLLOW THESE EXACTLY:
         print(f"\nNOTES SECTION:\n{notes_section}")
         print("="*60 + "\n")
 
+        # Build writing style instructions based on rhyming preference
+        if is_rhyming:
+            writing_style = "Each scene with 4 lines of AABB rhyming verse"
+            text_format = '["line 1", "line 2", "line 3", "line 4"]'
+            final_check = "- True rhymes (not near-rhymes)"
+        else:
+            writing_style = "Each scene with 2-4 sentences of engaging prose (DO NOT RHYME)"
+            text_format = '["First sentence.", "Second sentence.", "Third sentence."]'
+            final_check = "- Natural, flowing prose (NO rhyming)"
+
         user_prompt = f"""YOU MUST CREATE A STORY THAT MATCHES THESE EXACT SPECIFICATIONS:
 {notes_section}
 {specs_text}
+Writing Style: {"Rhyming verse (AABB pattern)" if is_rhyming else "Regular prose (DO NOT rhyme)"}
 
 IMPORTANT: The story MUST feature the Main Character specified above.
 The story MUST take place in the Setting specified above.
 The story MUST teach the Lesson specified above.
 DO NOT ignore any of these specifications. DO NOT substitute different characters, settings, or themes.
+{"IMPORTANT: Write in RHYMING VERSE with AABB rhyme scheme." if is_rhyming else "IMPORTANT: Write in REGULAR PROSE. Do NOT rhyme. Write natural narrative sentences."}
 
 Generate a complete story package with:
 - A catchy, age-appropriate title
 - Exactly 12 scenes
-- Each scene with 4 lines of AABB rhyming verse
+- {writing_style}
 - Detailed illustration prompts for each scene that match the Art Style specified above
 - Composition notes for artists (landscape/portrait, character placement, background details)
 - Text positioning (where text should go relative to the illustration)
@@ -266,7 +331,7 @@ Return as JSON with this structure:
     "scenes": [
         {{
             "scene_num": 1,
-            "text": ["line 1", "line 2", "line 3", "line 4"],
+            "text": {text_format},
             "illustration_prompt": "detailed description for artist",
             "composition": "Landscape orientation. Character on left side. Forest background. Soft lighting.",
             "text_position": "top-left"
@@ -281,7 +346,7 @@ FINAL REMINDER: Before outputting, carefully review ALL text for:
 - No random capitalized words mid-sentence
 - No double punctuation (.., !!, etc.)
 - Proper grammar and sentence structure
-- True rhymes (not near-rhymes)"""
+{final_check}"""
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=4096)
 
@@ -493,12 +558,13 @@ Return as JSON:
 
         return listing_data
 
-    def validate_story(self, story: Dict[str, Any]) -> tuple[bool, List[str]]:
+    def validate_story(self, story: Dict[str, Any], is_rhyming: bool = True) -> tuple[bool, List[str]]:
         """
         Validate story quality and structure.
 
         Args:
             story: Story dict to validate
+            is_rhyming: Whether the story should be in rhyming verse (affects validation rules)
 
         Returns:
             Tuple of (is_valid, list_of_errors)
@@ -525,8 +591,12 @@ Return as JSON:
         for i, scene in enumerate(scenes, 1):
             if 'text' not in scene or not isinstance(scene['text'], list):
                 errors.append(f"Scene {i}: Missing or invalid 'text' field")
-            elif len(scene['text']) != 4:
+            elif is_rhyming and len(scene['text']) != 4:
+                # Only enforce 4 lines for rhyming stories
                 errors.append(f"Scene {i}: Expected 4 lines, got {len(scene['text'])}")
+            elif not is_rhyming and len(scene['text']) < 1:
+                # Prose stories just need at least 1 sentence
+                errors.append(f"Scene {i}: Expected at least 1 sentence")
 
             if 'illustration_prompt' not in scene:
                 errors.append(f"Scene {i}: Missing 'illustration_prompt'")
@@ -537,23 +607,24 @@ Return as JSON:
             if 'text_position' not in scene:
                 errors.append(f"Scene {i}: Missing 'text_position'")
 
-        # Basic rhyme detection (AABB pattern)
-        rhyme_issues = 0
-        for i, scene in enumerate(scenes, 1):
-            text = scene.get('text', [])
-            if len(text) >= 2:
-                # Check if lines likely rhyme (simplified check based on ending sounds)
-                for j in range(0, min(4, len(text)), 2):
-                    if j + 1 < len(text):
-                        line1_end = text[j].split()[-1].lower() if text[j].split() else ""
-                        line2_end = text[j + 1].split()[-1].lower() if text[j + 1].split() else ""
-                        # Simple check: last 2-3 characters should be similar
-                        if line1_end and line2_end:
-                            if line1_end[-2:] != line2_end[-2:]:
-                                rhyme_issues += 1
+        # Basic rhyme detection (AABB pattern) - only for rhyming stories
+        if is_rhyming:
+            rhyme_issues = 0
+            for i, scene in enumerate(scenes, 1):
+                text = scene.get('text', [])
+                if len(text) >= 2:
+                    # Check if lines likely rhyme (simplified check based on ending sounds)
+                    for j in range(0, min(4, len(text)), 2):
+                        if j + 1 < len(text):
+                            line1_end = text[j].split()[-1].lower() if text[j].split() else ""
+                            line2_end = text[j + 1].split()[-1].lower() if text[j + 1].split() else ""
+                            # Simple check: last 2-3 characters should be similar
+                            if line1_end and line2_end:
+                                if line1_end[-2:] != line2_end[-2:]:
+                                    rhyme_issues += 1
 
-        if rhyme_issues > 0:
-            errors.append(f"Potential rhyme issues detected in {rhyme_issues} couplet(s)")
+            if rhyme_issues > 0:
+                errors.append(f"Potential rhyme issues detected in {rhyme_issues} couplet(s)")
 
         # Check for problematic content (very basic)
         problematic_words = ['scary', 'evil', 'dark', 'death', 'blood', 'violence']
@@ -578,13 +649,17 @@ Return as JSON:
         """
         print(f"Starting story generation pipeline for: {brief.get('theme', 'untitled')}")
 
+        # Check rhyming preference
+        is_rhyming = brief.get('rhyming', True)
+        print(f"  Writing style: {'Rhyming verse' if is_rhyming else 'Prose'}")
+
         # Generate story
         print("  1. Generating story (12 scenes)...")
         story = self.generate_story(brief)
 
         # Validate story
         print("  2. Validating story structure...")
-        is_valid, errors = self.validate_story(story)
+        is_valid, errors = self.validate_story(story, is_rhyming)
         if not is_valid:
             print(f"    Validation warnings:")
             for error in errors:

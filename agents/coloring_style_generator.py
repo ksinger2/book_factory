@@ -441,7 +441,7 @@ REMEMBER: This is a "{brief.theme}" coloring book. Every element must match that
                         prompt=prompt,
                         size="1536x1024",  # Landscape for reference sheet
                         n=1,
-                        quality="high"
+                        quality="medium"
                     )
 
                 # Save the result

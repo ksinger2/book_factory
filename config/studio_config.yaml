@@ -7,17 +7,17 @@ defaults:
   price_paperback: 9.99
   price_ebook: 4.99
   royalty_plan: 70%
-  author_name: ''
+  author_name: Starlit Stories Press
   publisher: Starlit Stories Press
   drm: true
 art:
   style: Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich
     but not oversaturated colors. Visible painterly brushstroke texture. Similar to
     Pete Oswald or Benji Davies children's book illustrations. NOT digital vector,
-    NOT 3D, NOT photorealistic, NOT anime. Character consistency across the full series -
-    same face, same color, same eye shape, same outfit, same proportions, same silhouette,
+    NOT 3D, NOT photorealistic, NOT anime. Character consistency across the full series
+    - same face, same color, same eye shape, same outfit, same proportions, same silhouette,
     same world, same lighting language, same rendering style across every image.
-  quality: high
+  quality: medium
   retries: 3
   qa_enabled: true
 research:
@@ -35,3 +35,59 @@ pipeline:
   skip_research: false
   skip_publish: false
   auto_upload_art: false
+coloring:
+  defaults:
+    age_level: adult
+    difficulty: medium
+    num_pages: 24
+    book_size: 8.5x8.5
+  themes:
+  - name: Mandalas & Patterns
+    desc: Intricate circular designs
+  - name: Animals & Pets
+    desc: Cats, dogs, wildlife
+  - name: Nature & Botanicals
+    desc: Flowers, plants, gardens
+  - name: Fantasy & Mythology
+    desc: Dragons, fairies, magic
+  - name: Aquatic & Ocean
+    desc: Fish, sea creatures, underwater
+  - name: Birds & Insects
+    desc: Butterflies, birds, bugs
+  - name: Architecture & Cities
+    desc: Buildings, cityscapes
+  - name: Food & Desserts
+    desc: Cakes, fruits, treats
+  - name: Holidays & Seasons
+    desc: Christmas, Halloween, etc
+  - name: Inspirational Quotes
+    desc: Typography with designs
+  age_levels:
+    kid:
+      line_weight: 4-6pt
+      planes: 3-8
+      description: Ages 3-6, bold simple shapes
+    tween:
+      line_weight: 2-4pt
+      planes: 10-20
+      description: Ages 7-12, moderate detail
+    teen:
+      line_weight: 1-2pt
+      planes: 20-40
+      description: Ages 13-17, detailed designs
+    ya:
+      line_weight: 0.5-1.5pt
+      planes: 30-50
+      description: Ages 18-25, artistic style
+    adult:
+      line_weight: 0.25-1pt
+      planes: 40-80
+      description: Ages 26-55, intricate patterns
+    elder:
+      line_weight: 1.5-3pt
+      planes: 15-30
+      description: Ages 55+, clear relaxing designs
+  qa:
+    enabled: true
+    max_retries: 3
+    min_score: 70

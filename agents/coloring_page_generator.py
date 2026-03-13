@@ -399,7 +399,7 @@ Single coloring page, pure black lines on white background."""
                     prompt=prompt,
                     size="1024x1024",
                     n=1,
-                    quality="high"
+                    quality="medium"
                 )
 
                 if response.data[0].b64_json:

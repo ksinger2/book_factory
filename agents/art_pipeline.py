@@ -37,6 +37,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class CriticalImageFailure(Exception):
+    """Raised when first image fails after all retries - abort pipeline to save costs."""
+    pass
+
+
 class ArtPipeline:
     """
     Manages the complete art generation pipeline for children's book illustrations.
@@ -48,13 +53,14 @@ class ArtPipeline:
     # Default style only used when no style is provided
     DEFAULT_STYLE = "Soft watercolor children's book illustration with gentle colors and warm, friendly aesthetic. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image."
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None, qa_first_only: bool = True):
         """
         Initialize the ArtPipeline.
 
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY environment variable.
-            model: Vision model to use for QA checks. Defaults to gpt-4o.
+            model: Vision model to use for QA checks. Defaults to gpt-4o-mini.
+            qa_first_only: If True, only QA the character sheet (first image) to save costs.
             style: Art style to use for all generations. If None, must be provided per-method call.
             eye_style: Specific eye style instructions for character consistency.
             reference_image: Base64 data URL of a reference image for character design.
@@ -82,6 +88,7 @@ class ArtPipeline:
         # QA thresholds
         self.max_retries = 3
         self.initial_backoff = 30  # seconds
+        self.qa_first_only = qa_first_only  # Only QA character sheet to save costs
 
         # Analyze reference image if provided
         self.reference_features = None
@@ -140,7 +147,7 @@ Format as a single paragraph description suitable for an artist. START WITH SKIN
             for attempt in range(3):
                 try:
                     response = self.client.chat.completions.create(
-                        model="gpt-4o",
+                        model=self.vision_model,
                         max_tokens=500,
                         messages=[
                             {
@@ -236,7 +243,7 @@ Keep descriptions concise but EXACT. Every detail you specify will be used to ma
             for attempt in range(3):
                 try:
                     response = self.client.chat.completions.create(
-                        model="gpt-4o",
+                        model=self.vision_model,
                         max_tokens=800,
                         messages=[
                             {
@@ -456,7 +463,7 @@ CONSTRAINTS:
         active_reference = guidance_reference or self.reference_image
 
         attempt = 0
-        while attempt <= self.max_retries:
+        while attempt < self.max_retries:
             try:
                 # Generate character sheet - use images.edit if reference image provided
                 if active_reference:
@@ -487,7 +494,7 @@ Preserve their EXACT features in the illustrated character:
                         prompt=prompt,
                         size="1536x1024",  # Landscape for character sheet
                         n=1,
-                        quality="high"
+                        quality="medium"
                     )
 
                 # gpt-image-1 returns base64 data
@@ -509,20 +516,20 @@ Preserve their EXACT features in the illustrated character:
                 return None, output_path
 
             except RateLimitError:
-                if attempt < self.max_retries:
+                if attempt < self.max_retries - 1:
                     self._exponential_backoff(attempt)
                     attempt += 1
                 else:
-                    raise Exception("Character sheet generation failed after max retries")
+                    raise CriticalImageFailure("Character sheet generation failed after 3 retries. Aborting pipeline to save costs.")
             except Exception as e:
                 logger.error(f"Error generating character sheet: {e}")
-                if attempt < self.max_retries:
+                if attempt < self.max_retries - 1:
                     attempt += 1
                     time.sleep(5)
                 else:
-                    raise
+                    raise CriticalImageFailure(f"Character sheet generation failed after 3 retries: {e}. Aborting pipeline to save costs.")
 
-        raise Exception("Character sheet generation failed")
+        raise CriticalImageFailure("Character sheet generation failed after 3 retries. Aborting pipeline to save costs.")
 
     def generate_illustration(
         self,
@@ -623,7 +630,7 @@ CONSTRAINTS:
         logger.info(f"Generating {illustration_type}: {scene_description[:50]}...")
 
         attempt = 0
-        while attempt <= self.max_retries:
+        while attempt < self.max_retries:
             try:
                 # Use images.edit with character sheet as reference for consistency
                 logger.info(f"Using images.edit with character sheet for {illustration_type}")
@@ -901,17 +908,22 @@ CRITICAL - Preserve these features EXACTLY from the reference:
                         style=art_style
                     )
 
-                    passed, qa_result = self.qa_check(cover_path, story_package["cover_scene"])
-                    results["qa_results"]["cover"] = {
-                        "passed": passed,
-                        "result": qa_result
-                    }
-
-                    if not passed:
-                        results["failed_images"].append("cover")
-                    else:
+                    # Skip QA on cover when qa_first_only is enabled (saves cost)
+                    if self.qa_first_only:
                         results["cover"] = cover_path
-                        logger.info("Cover passed QA")
+                        logger.info("Cover generated (QA skipped - qa_first_only mode)")
+                    else:
+                        passed, qa_result = self.qa_check(cover_path, story_package["cover_scene"])
+                        results["qa_results"]["cover"] = {
+                            "passed": passed,
+                            "result": qa_result
+                        }
+
+                        if not passed:
+                            results["failed_images"].append("cover")
+                        else:
+                            results["cover"] = cover_path
+                            logger.info("Cover passed QA")
 
                 except Exception as e:
                     logger.error(f"Failed to generate cover: {e}")
@@ -935,7 +947,7 @@ CRITICAL - Preserve these features EXACTLY from the reference:
                 logger.info(f"Generating spread {i}/12...")
 
                 retry_count = 0
-                while retry_count <= self.max_retries:
+                while retry_count < self.max_retries:
                     try:
                         _, spread_path = self.generate_illustration(
                             spread_description,
@@ -944,6 +956,12 @@ CRITICAL - Preserve these features EXACTLY from the reference:
                             output_path=spread_path,
                             style=art_style
                         )
+
+                        # Skip QA on spreads when qa_first_only is enabled (saves cost)
+                        if self.qa_first_only:
+                            results["spreads"].append(spread_path)
+                            logger.info(f"Spread {i} generated (QA skipped - qa_first_only mode)")
+                            break
 
                         passed, qa_result = self.qa_check(
                             spread_path,
@@ -965,10 +983,10 @@ CRITICAL - Preserve these features EXACTLY from the reference:
                     except Exception as e:
                         logger.error(f"Error generating spread {i}: {e}")
                         retry_count += 1
-                        if retry_count <= self.max_retries:
+                        if retry_count < self.max_retries:
                             time.sleep(5)
 
-                if retry_count > self.max_retries:
+                if retry_count >= self.max_retries:
                     logger.error(f"Spread {i} failed after {self.max_retries} retries")
                     results["failed_images"].append(spread_name)
 
@@ -988,20 +1006,25 @@ CRITICAL - Preserve these features EXACTLY from the reference:
                         style=art_style
                     )
 
-                    passed, qa_result = self.qa_check(
-                        back_cover_path,
-                        story_package["back_cover_scene"]
-                    )
-                    results["qa_results"]["back_cover"] = {
-                        "passed": passed,
-                        "result": qa_result
-                    }
-
-                    if not passed:
-                        results["failed_images"].append("back_cover")
-                    else:
+                    # Skip QA on back cover when qa_first_only is enabled (saves cost)
+                    if self.qa_first_only:
                         results["back_cover"] = back_cover_path
-                        logger.info("Back cover passed QA")
+                        logger.info("Back cover generated (QA skipped - qa_first_only mode)")
+                    else:
+                        passed, qa_result = self.qa_check(
+                            back_cover_path,
+                            story_package["back_cover_scene"]
+                        )
+                        results["qa_results"]["back_cover"] = {
+                            "passed": passed,
+                            "result": qa_result
+                        }
+
+                        if not passed:
+                            results["failed_images"].append("back_cover")
+                        else:
+                            results["back_cover"] = back_cover_path
+                            logger.info("Back cover passed QA")
 
                 except Exception as e:
                     logger.error(f"Failed to generate back cover: {e}")

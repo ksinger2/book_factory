@@ -292,7 +292,7 @@ Color it beautifully with appropriate colors, then incorporate it into the cover
                     prompt=prompt,
                     size="1024x1536",  # Portrait for cover
                     n=1,
-                    quality="high"
+                    quality="medium"
                 )
 
                 if response.data[0].b64_json:
