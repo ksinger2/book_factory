@@ -1236,6 +1236,7 @@ def api_coloring_reference():
         data = request.json
         book_id = data.get("book_id")
         feedback = data.get("feedback", "")  # User feedback for regeneration
+        draft_mode = data.get("draft_mode", False)  # Use cheaper models for testing
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
 
@@ -1274,7 +1275,7 @@ def api_coloring_reference():
         )
 
         # Generate reference sheet
-        generator = ColoringStyleGenerator()
+        generator = ColoringStyleGenerator(draft_mode=draft_mode)
         output_path = book_dir / "reference_sheet.png"
         success, path = generator.generate_reference_sheet(style_brief, output_path)
 
@@ -1381,6 +1382,9 @@ def api_coloring_pages():
         with open(concepts_path) as f:
             concepts = json.load(f)
 
+    # Get draft mode from request
+    draft_mode = data.get("draft_mode", False)
+
     def generate_pages_with_progress():
         from agents.coloring_page_generator import ColoringPageGenerator, PageConfig
         from agents.coloring_qa_checker import ColoringQAChecker
@@ -1395,7 +1399,7 @@ def api_coloring_pages():
         pages_dir = book_dir / "pages"
         pages_dir.mkdir(exist_ok=True)
 
-        generator = ColoringPageGenerator()
+        generator = ColoringPageGenerator(draft_mode=draft_mode)
         qa_checker = ColoringQAChecker()
 
         results = {
@@ -1515,6 +1519,7 @@ def api_coloring_regenerate():
         feedback = data.get("feedback", "")  # User feedback for regeneration
         use_current_as_reference = data.get("use_current_as_reference", False)
         additional_references = data.get("additional_references", [])  # Extra reference image paths
+        draft_mode = data.get("draft_mode", False)  # Use cheaper models for testing
 
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
@@ -1589,7 +1594,7 @@ def api_coloring_regenerate():
                     extra_refs.append(local_path)
                     log.info(f"Added additional reference: {local_path}")
 
-        generator = ColoringPageGenerator()
+        generator = ColoringPageGenerator(draft_mode=draft_mode)
         qa_checker = ColoringQAChecker()
 
         # Generate with additional references if provided
@@ -1637,6 +1642,7 @@ def api_coloring_cover():
         book_id = data.get("book_id")
         feedback = data.get("feedback", "")  # User feedback for regeneration
         cover_type = data.get("cover_type", "")  # 'front', 'back', or '' for both
+        draft_mode = data.get("draft_mode", False)  # Use cheaper models for testing
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
 
@@ -1682,7 +1688,7 @@ def api_coloring_cover():
             page_files = sorted(pages_dir.glob("page_*.png"))[:3]
             sample_pages = [Path(p) for p in page_files]
 
-        generator = ColoringCoverGenerator()
+        generator = ColoringCoverGenerator(draft_mode=draft_mode)
         results = generator.generate_both(cover_brief, sample_pages, book_dir)
 
         response = {

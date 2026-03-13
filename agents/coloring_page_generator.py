@@ -196,12 +196,13 @@ class ColoringPageGenerator:
     to maintain consistent visual language throughout the book.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, draft_mode: bool = False):
         """
         Initialize the page generator.
 
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
+            draft_mode: If True, use cheaper models and settings for testing.
         """
         if api_key is None:
             api_key = os.environ.get('OPENAI_API_KEY')
@@ -211,14 +212,23 @@ class ColoringPageGenerator:
                 )
 
         self.client = OpenAI(api_key=api_key)
-        self.image_model = "gpt-image-1"
+        self.draft_mode = draft_mode
+
+        # Model and quality selection for cost optimization:
+        # - dall-e-2: ~$0.02/image (cheapest, good for drafts)
+        # - gpt-image-1: ~$0.04-0.08/image (better quality for production)
+        if draft_mode:
+            self.image_model = "dall-e-2"
+            self.image_quality = "standard"
+            self.estimated_cost_per_image = 0.02
+            logger.info("Draft mode enabled - using dall-e-2 for cheaper testing")
+        else:
+            self.image_model = "gpt-image-1"
+            self.image_quality = "high"
+            self.estimated_cost_per_image = 0.05
+
         self.max_retries = 3
         self.initial_backoff = 30
-
-        # Cost tracking (approximate costs per image at 1024x1024)
-        # gpt-image-1: ~$0.04-0.08 per image
-        # dall-e-2: ~$0.02 per image
-        self.estimated_cost_per_image = 0.05  # Conservative estimate
 
         logger.info(f"ColoringPageGenerator initialized with model: {self.image_model}")
 

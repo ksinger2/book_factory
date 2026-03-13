@@ -182,12 +182,13 @@ class ColoringStyleGenerator:
     establish line weight, complexity, and visual language for the entire book.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, draft_mode: bool = False):
         """
         Initialize the style generator.
 
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
+            draft_mode: If True, use cheaper models and settings for testing.
         """
         if api_key is None:
             api_key = os.environ.get('OPENAI_API_KEY')
@@ -197,11 +198,19 @@ class ColoringStyleGenerator:
                 )
 
         self.client = OpenAI(api_key=api_key)
+        self.draft_mode = draft_mode
+
         # Model selection for cost optimization:
-        # - dall-e-2: Cheapest (~$0.02/image), use for simple generation without references
-        # - gpt-image-1: More expensive, but needed for images.edit with references
-        self.cheap_model = "dall-e-2"  # For generation without reference
-        self.image_model = "gpt-image-1"  # For edit with reference image
+        # - dall-e-2: Cheapest (~$0.02/image), use for drafts and simple generation
+        # - gpt-image-1: More expensive, but better quality for production
+        if draft_mode:
+            self.cheap_model = "dall-e-2"
+            self.image_model = "dall-e-2"  # Use dall-e-2 for everything in draft mode
+            logger.info("Draft mode enabled - using dall-e-2 for all images")
+        else:
+            self.cheap_model = "dall-e-2"  # For generation without reference
+            self.image_model = "gpt-image-1"  # For edit with reference image
+
         self.max_retries = 3
         self.initial_backoff = 30
 

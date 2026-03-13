@@ -109,12 +109,13 @@ class ColoringCoverGenerator:
     colored sample artwork, and prominent readable titles.
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, draft_mode: bool = False):
         """
         Initialize the cover generator.
 
         Args:
             api_key: OpenAI API key. If None, reads from OPENAI_API_KEY env var.
+            draft_mode: If True, use cheaper models for testing.
         """
         if api_key is None:
             api_key = os.environ.get('OPENAI_API_KEY')
@@ -124,7 +125,15 @@ class ColoringCoverGenerator:
                 )
 
         self.client = OpenAI(api_key=api_key)
-        self.image_model = "gpt-image-1"
+        self.draft_mode = draft_mode
+
+        # Model selection for cost optimization
+        if draft_mode:
+            self.image_model = "dall-e-2"
+            logger.info("Draft mode enabled - using dall-e-2 for cheaper testing")
+        else:
+            self.image_model = "gpt-image-1"
+
         self.max_retries = 3
         self.initial_backoff = 30
 

@@ -58,6 +58,14 @@
   .btn-primary { background:var(--accent); color:#fff; } .btn-primary:hover { background:var(--accent2); }
   .btn-secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); } .btn-secondary:hover { border-color:var(--accent); }
   .btn-green { background:var(--green); color:var(--bg); font-weight:600; } .btn-green:hover { filter:brightness(1.1); }
+
+  /* Toggle switch */
+  .toggle-switch { position:relative; display:inline-block; width:50px; height:26px; }
+  .toggle-switch input { opacity:0; width:0; height:0; }
+  .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--surface2); border-radius:26px; transition:0.3s; }
+  .toggle-slider:before { position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px; background:var(--text); border-radius:50%; transition:0.3s; }
+  .toggle-switch input:checked + .toggle-slider { background:var(--yellow); }
+  .toggle-switch input:checked + .toggle-slider:before { transform:translateX(24px); }
   .btn-ghost { background:transparent; color:var(--dim); } .btn-ghost:hover { color:var(--text); }
   .btn:disabled { opacity:0.4; cursor:not-allowed; }
   .actions { display:flex; justify-content:space-between; margin-top:28px; padding-top:18px; border-top:1px solid var(--border); }
@@ -243,6 +251,7 @@ const S = {
   },
   // Coloring book state
   coloring: {
+    draftMode: false,  // Use cheaper models for testing
     brief: {
       title: '', theme: '', themeCustom: '', ageLevel: 'adult', difficulty: 'medium',
       numPages: 24, bookSize: '8.5x8.5', referenceImage: null, notes: '', style: 'bold-easy', customStyle: ''
@@ -1839,6 +1848,26 @@ function vColoringBrief() {
       </div>
     </div>
 
+    <div class="card" style="border-color:${S.coloring.draftMode ? 'var(--yellow)' : 'var(--border)'};">
+      <h3>💰 Cost Mode</h3>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <label class="toggle-switch">
+          <input type="checkbox" id="draftMode" ${S.coloring.draftMode ? 'checked' : ''} onchange="S.coloring.draftMode = this.checked; render();"/>
+          <span class="toggle-slider"></span>
+        </label>
+        <div>
+          <div style="font-weight:600;color:${S.coloring.draftMode ? 'var(--yellow)' : 'var(--text)'};">
+            ${S.coloring.draftMode ? '⚡ Draft Mode (Cheaper)' : '✨ Production Mode (Best Quality)'}
+          </div>
+          <div style="font-size:12px;color:var(--dim);">
+            ${S.coloring.draftMode
+              ? 'Uses dall-e-2, lower resolution, no QA retries. ~$0.50/book instead of ~$2.50/book'
+              : 'Uses gpt-image-1, high resolution, QA retries for quality. Best for final books.'}
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="actions">
       <button class="btn btn-ghost" onclick="go(0)">← Setup</button>
       <div style="display:flex;gap:8px;">
@@ -2102,7 +2131,7 @@ async function generateReference(feedback = '') {
   render();
 
   try {
-    const r = await api('/api/coloring/reference', { book_id: S.coloring.bookId, feedback: feedback });
+    const r = await api('/api/coloring/reference', { book_id: S.coloring.bookId, feedback: feedback, draft_mode: S.coloring.draftMode });
 
     // Stop progress timer
     if (S.coloring.progressTimer) { clearInterval(S.coloring.progressTimer); S.coloring.progressTimer = null; }
@@ -2251,7 +2280,7 @@ async function generateColoringPages() {
     const response = await fetch('/api/coloring/pages', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ book_id: S.coloring.bookId })
+      body: JSON.stringify({ book_id: S.coloring.bookId, draft_mode: S.coloring.draftMode })
     });
 
     const reader = response.body.getReader();
@@ -2352,7 +2381,8 @@ async function doRegenerateColoringPage(pageNum, currentImagePath, feedback, add
         page_num: pageNum,
         feedback: feedback,
         use_current_as_reference: true,
-        additional_references: additionalRefs
+        additional_references: additionalRefs,
+        draft_mode: S.coloring.draftMode
       }),
       signal: abortController.signal
     });
@@ -2465,7 +2495,8 @@ async function generateColoringCovers(feedback = '', coverType = '') {
     const r = await api('/api/coloring/cover', {
       book_id: S.coloring.bookId,
       feedback: feedback,
-      cover_type: coverType  // 'front', 'back', or '' for both
+      cover_type: coverType,  // 'front', 'back', or '' for both
+      draft_mode: S.coloring.draftMode
     });
 
     if (r.ok) {
@@ -2663,6 +2694,7 @@ async function publishColoringBook(dryRun) {
 
 function startNewColoringBook() {
   S.coloring = {
+    draftMode: false,  // Use cheaper models for testing
     brief: { title: '', theme: '', themeCustom: '', ageLevel: 'adult', difficulty: 'medium', numPages: 24, bookSize: '8.5x8.5', referenceImage: null, notes: '' },
     bookId: null, referenceSheet: null, referenceApproved: false, concepts: [], pages: [],
     cover: null, backCover: null,
