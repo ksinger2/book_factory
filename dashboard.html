@@ -118,13 +118,16 @@
   .story-scene:last-child { border:none; margin:0; padding:0; }
   .scene-num { font-size:10px; color:var(--accent); font-weight:600; text-transform:uppercase; }
 
-  /* Image gallery */
-  .gallery { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
-  .gallery img { width:100%; border-radius:6px; border:1px solid var(--border); }
-  .image-item { position:relative; }
-  .image-item .regen-btn { position:absolute; bottom:6px; right:6px; padding:4px 8px; font-size:10px; background:rgba(0,0,0,0.7); border:1px solid var(--border); border-radius:4px; color:var(--text); cursor:pointer; opacity:0; transition:opacity 0.15s; }
+  /* Image gallery - responsive grid with consistent sizing */
+  .gallery { display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:16px; }
+  .gallery img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:8px; border:2px solid var(--border); }
+  .image-item { position:relative; max-width:280px; }
+  .image-item .regen-btn { position:absolute; bottom:8px; right:8px; padding:6px 10px; font-size:11px; background:rgba(0,0,0,0.8); border:1px solid var(--border); border-radius:6px; color:var(--text); cursor:pointer; opacity:0; transition:opacity 0.15s; }
   .image-item:hover .regen-btn { opacity:1; }
-  .image-item .image-label { position:absolute; top:6px; left:6px; padding:2px 6px; font-size:9px; background:rgba(0,0,0,0.7); border-radius:3px; color:var(--dim); }
+  .image-item .image-label { position:absolute; top:8px; left:8px; padding:3px 8px; font-size:10px; background:rgba(0,0,0,0.8); border-radius:4px; color:var(--text); font-weight:500; }
+  /* Cover and featured images - centered with consistent max width */
+  .featured-image { display:flex; justify-content:center; margin:20px 0; }
+  .featured-image img { max-width:320px; width:100%; border-radius:10px; border:2px solid var(--border); }
 
   /* Scene text editor */
   .scene-editor textarea { width:100%; min-height:80px; background:var(--bg); border:1px solid var(--accent); border-radius:8px; padding:10px; color:var(--text); font-family:inherit; font-size:13px; resize:vertical; line-height:1.6; }
@@ -168,6 +171,34 @@
   .toggle-switch input:checked + .toggle-slider:before { transform:translateX(20px); background:#fff; }
 
   @media (max-width:768px) { .sidebar{display:none} .main{margin-left:0;padding:20px;} .row,.row3{grid-template-columns:1fr;} }
+
+  /* PDF Preview Modal */
+  .pdf-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center; }
+  .pdf-modal-content { background:var(--bg); border-radius:12px; width:90%; height:90%; max-width:900px; padding:16px; display:flex; flex-direction:column; }
+  .pdf-modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .pdf-modal-header h3 { margin:0; color:var(--text); }
+  .pdf-modal iframe { flex:1; border:1px solid var(--border); border-radius:8px; background:#fff; }
+
+  /* Regen Feedback Modal */
+  .regen-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; align-items:center; justify-content:center; }
+  .regen-modal-content { background:var(--bg); border-radius:12px; width:90%; max-width:700px; padding:20px; max-height:90vh; overflow-y:auto; }
+  .regen-modal h3 { margin:0 0 8px 0; color:var(--text); }
+  .regen-modal p { margin:0 0 16px 0; color:var(--dim); font-size:13px; }
+  .regen-modal textarea { width:100%; height:80px; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; color:var(--text); font-size:13px; resize:vertical; margin-bottom:16px; }
+  .regen-modal textarea::placeholder { color:var(--dim); }
+  .regen-modal-preview { display:flex; justify-content:center; margin-bottom:16px; }
+  .regen-modal-preview img { max-height:180px; border-radius:8px; border:2px solid var(--accent); }
+  .regen-modal-actions { display:flex; gap:8px; justify-content:flex-end; }
+  .regen-refs { margin-bottom:16px; }
+  .regen-refs h4 { font-size:12px; color:var(--dim); margin:0 0 8px 0; }
+  .regen-refs-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr)); gap:8px; }
+  .regen-ref-thumb { position:relative; cursor:pointer; border-radius:6px; overflow:hidden; border:2px solid transparent; transition:border-color 0.2s; }
+  .regen-ref-thumb:hover { border-color:var(--accent-dim); }
+  .regen-ref-thumb.selected { border-color:var(--green); }
+  .regen-ref-thumb img { width:100%; aspect-ratio:1; object-fit:cover; display:block; }
+  .regen-ref-thumb .check { position:absolute; top:4px; right:4px; background:var(--green); color:#fff; width:18px; height:18px; border-radius:50%; display:none; align-items:center; justify-content:center; font-size:12px; }
+  .regen-ref-thumb.selected .check { display:flex; }
+  .regen-ref-thumb span { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.7); color:#fff; font-size:9px; padding:2px 4px; text-align:center; }
 </style>
 </head>
 <body>
@@ -188,6 +219,7 @@ const S = {
   config: { authorName:'Starlit Stories Press', publisher:'Starlit Stories Press' },
   book: {
     category:'', ageRange:'3-6', theme:'', animal:'', lesson:'', setting:'', tone:'whimsical', notes:'',
+    hardRules:'',  // Hard rules that apply to ALL image prompts (not story)
     rhyming: true,  // Whether the story should be written in rhyming verse
     referenceImage: null, referenceImagePreview: '',
     artStyle:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations.',
@@ -232,8 +264,54 @@ const S = {
   },
   // Track regenerating images globally
   regenerating: {},  // {'spread_1': true, 'cover': true, etc.}
-  regenAbortControllers: {}  // AbortControllers for cancellation
+  regenAbortControllers: {},  // AbortControllers for cancellation
+  // Change tracking for briefs
+  coloringBriefSaved: null,  // Snapshot of last saved coloring brief state
+  bookBriefSaved: null       // Snapshot of last saved children's book brief state
 };
+
+// Helper functions for change detection
+function getCurrentColoringBrief() {
+  return {
+    title: v('coloringTitle') || S.coloring.brief.title,
+    theme: v('coloringTheme') || S.coloring.brief.theme,
+    themeCustom: v('coloringThemeCustom') || S.coloring.brief.themeCustom,
+    ageLevel: v('coloringAgeLevel') || S.coloring.brief.ageLevel,
+    difficulty: v('coloringDifficulty') || S.coloring.brief.difficulty,
+    numPages: parseInt(v('coloringNumPages')) || S.coloring.brief.numPages,
+    bookSize: v('coloringBookSize') || S.coloring.brief.bookSize,
+    notes: v('coloringNotes') || S.coloring.brief.notes,
+    style: v('coloringStyle') || S.coloring.brief.style,
+    customStyle: v('coloringCustomStyle') || S.coloring.brief.customStyle
+  };
+}
+
+function getCurrentBookBrief() {
+  return {
+    category: v('category') || S.book.category,
+    ageRange: v('ageRange') || S.book.ageRange,
+    animal: v('animal') || S.book.animal,
+    lesson: v('lesson') || S.book.lesson,
+    theme: v('theme') || S.book.theme,
+    setting: v('setting') || S.book.setting,
+    tone: v('tone') || S.book.tone,
+    notes: v('notes') || S.book.notes,
+    hardRules: v('hardRules') || S.book.hardRules,
+    rhyming: document.getElementById('rhyming')?.checked ?? S.book.rhyming
+  };
+}
+
+function hasColoringBriefChanges() {
+  if (!S.coloringBriefSaved) return false;
+  const current = getCurrentColoringBrief();
+  return JSON.stringify(current) !== JSON.stringify(S.coloringBriefSaved);
+}
+
+function hasBookBriefChanges() {
+  if (!S.bookBriefSaved) return false;
+  const current = getCurrentBookBrief();
+  return JSON.stringify(current) !== JSON.stringify(S.bookBriefSaved);
+}
 
 // Coloring book theme options
 const COLORING_THEMES = [
@@ -321,6 +399,15 @@ function render() {
   }
   document.getElementById('content').innerHTML = views[S.step]();
   bind();
+
+  // Initialize saved state snapshots when entering brief pages (for change detection)
+  if (S.mode === 'coloring' && S.step === 1 && !S.coloringBriefSaved) {
+    // Delay to ensure form elements exist
+    setTimeout(() => { S.coloringBriefSaved = getCurrentColoringBrief(); }, 0);
+  }
+  if (S.mode === 'childrens' && S.step === 2 && !S.bookBriefSaved) {
+    setTimeout(() => { S.bookBriefSaved = getCurrentBookBrief(); }, 0);
+  }
 }
 
 // Update only progress bar and timer - no full re-render
@@ -341,6 +428,13 @@ function go(n) {
   if (S.mode === 'coloring' && (n === 3 || n === 4) && !S.coloring.referenceApproved) {
     alert('Please approve the reference sheet first. All image generation is blocked until you approve the style.');
     return;
+  }
+  // Check for unsaved changes on brief pages
+  if (S.mode === 'coloring' && S.step === 1 && hasColoringBriefChanges()) {
+    if (!confirm('You have unsaved changes. Proceed without saving?')) return;
+  }
+  if (S.mode === 'childrens' && S.step === 2 && hasBookBriefChanges()) {
+    if (!confirm('You have unsaved changes. Proceed without saving?')) return;
   }
   S.step=n; render(); window.scrollTo(0,0);
 }
@@ -575,10 +669,18 @@ function vBrief() {
           </div>
         </div>
       </div>
+      <div class="field">
+        <label>Hard Rules for Images (optional)</label>
+        <div class="hint">Rules that apply to ALL generated images. These are strictly enforced and NOT included in story text.</div>
+        <textarea id="hardRules" rows="2" placeholder="e.g., NO ONE WEARS GREEN, ALL CHARACTERS MUST SMILE, NO HATS">${S.book.hardRules||''}</textarea>
+      </div>
     </div>
     <div class="actions">
       <button class="btn btn-ghost" onclick="go(1)">← Research</button>
-      <button class="btn btn-primary" onclick="saveBrief()">Continue →</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="saveBriefOnly()">Save</button>
+        <button class="btn btn-primary" onclick="saveBrief()">Continue →</button>
+      </div>
     </div>
   </div>`;
 }
@@ -612,6 +714,7 @@ function saveFieldsBeforeToggle() {
   const setting = document.getElementById('setting');
   const tone = document.getElementById('tone');
   const notes = document.getElementById('notes');
+  const hardRules = document.getElementById('hardRules');
 
   if (cat) S.book.category = cat.value;
   if (age) S.book.ageRange = age.value;
@@ -621,6 +724,7 @@ function saveFieldsBeforeToggle() {
   if (setting) S.book.setting = setting.value;
   if (tone) S.book.tone = tone.value;
   if (notes) S.book.notes = notes.value;
+  if (hardRules) S.book.hardRules = hardRules.value;
 }
 
 // Toggle rhyming without full page re-render
@@ -636,9 +740,32 @@ function toggleRhyming(checked) {
 function saveBrief() {
   S.book.category=v('category'); S.book.ageRange=v('ageRange'); S.book.animal=v('animal');
   S.book.lesson=v('lesson'); S.book.theme=v('theme'); S.book.setting=v('setting');
-  S.book.tone=v('tone'); S.book.notes=v('notes');
+  S.book.tone=v('tone'); S.book.notes=v('notes'); S.book.hardRules=v('hardRules');
   S.book.rhyming=document.getElementById('rhyming')?.checked ?? true;
+  // Update saved state snapshot for change detection
+  S.bookBriefSaved = getCurrentBookBrief();
   go(3);
+}
+
+// Save children's book brief without navigating away
+function saveBriefOnly() {
+  S.book.category=v('category'); S.book.ageRange=v('ageRange'); S.book.animal=v('animal');
+  S.book.lesson=v('lesson'); S.book.theme=v('theme'); S.book.setting=v('setting');
+  S.book.tone=v('tone'); S.book.notes=v('notes'); S.book.hardRules=v('hardRules');
+  S.book.rhyming=document.getElementById('rhyming')?.checked ?? true;
+  // Update saved state snapshot for change detection
+  S.bookBriefSaved = getCurrentBookBrief();
+  // Show success feedback without navigating
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.textContent = '✓ Saved';
+  btn.style.background = 'var(--green)';
+  btn.style.color = 'var(--bg)';
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.style.background = '';
+    btn.style.color = '';
+  }, 1500);
 }
 
 // ─── Step 4: Art Style ───
@@ -839,9 +966,9 @@ function vGenerate() {
       <h3>Character Sheet ${S.gen.charsheetApproved ? '<span style="color:var(--green);font-size:14px;">✓ Approved</span>' : ''}</h3>
 
       ${S.gen.characterSheet ? `
-        <div style="text-align:center;margin:16px 0;">
+        <div class="featured-image" style="margin:16px 0;">
           <img src="/api/files/${S.gen.bookId}/art/${S.gen.characterSheet}?t=${Date.now()}"
-               style="max-width:600px;width:100%;border-radius:8px;border:1px solid var(--border);"
+               style="max-width:400px;width:100%;border-radius:10px;border:2px solid var(--border);"
                onerror="this.style.display='none'"/>
         </div>
         ${!S.gen.charsheetApproved ? `
@@ -919,29 +1046,42 @@ function vGenerate() {
     </div>
     ` : ''}
 
-    ${S.gen.generatedImages.length > 0 ? `<div class="card">
+    ${S.gen.generatedImages.length > 0 ? (() => {
+      const coverImg = S.gen.generatedImages.find(img => img.type === 'cover');
+      const sceneImgs = S.gen.generatedImages.filter(img => img.type !== 'cover');
+
+      const renderImage = (img) => {
+        const regenKey = img.type === 'spread' ? `spread_${img.index}` : img.type;
+        const isRegenerating = S.regenerating[regenKey];
+        return `
+        <div class="image-item" style="position:relative;">
+          <span class="image-label">${img.type === 'spread' ? 'Scene '+img.index : img.type.replace('_',' ')}</span>
+          <div style="position:relative;">
+            <img src="/api/files/${S.gen.bookId}/art/${img.path}?t=${img.timestamp||Date.now()}" alt="${img.type}" style="${isRegenerating ? 'opacity:0.3;filter:grayscale(100%);' : ''}"/>
+            ${isRegenerating ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;">
+              <div class="spinner"></div>
+              <span style="font-size:11px;color:var(--text);">Regenerating...</span>
+              <button onclick="cancelRegeneration('${regenKey}')" style="padding:4px 12px;font-size:10px;background:var(--red);color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
+            </div>` : ''}
+          </div>
+          <button class="regen-btn" onclick="regenerateImage('${img.type}', ${img.index})" ${isRegenerating ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}><span style="margin-right:4px;">⟳</span>Regen</button>
+        </div>`;
+      };
+
+      return `<div class="card">
       <h3>Generated Images</h3>
       <p style="font-size:11px;color:var(--dim);margin-bottom:12px;">Click the regenerate button on any image to create a new version</p>
-      <div class="gallery">
-        ${S.gen.generatedImages.map((img, i) => {
-          const regenKey = img.type === 'spread' ? `spread_${img.index}` : img.type;
-          const isRegenerating = S.regenerating[regenKey];
-          return `
-          <div class="image-item" style="position:relative;">
-            <span class="image-label">${img.type === 'spread' ? 'Scene '+img.index : img.type.replace('_',' ')}</span>
-            <div style="position:relative;">
-              <img src="/api/files/${S.gen.bookId}/art/${img.path}?t=${img.timestamp||Date.now()}" alt="${img.type}" style="${isRegenerating ? 'opacity:0.3;filter:grayscale(100%);' : ''}"/>
-              ${isRegenerating ? `<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:8px;">
-                <div class="spinner"></div>
-                <span style="font-size:11px;color:var(--text);">Regenerating...</span>
-                <button onclick="cancelRegeneration('${regenKey}')" style="padding:4px 12px;font-size:10px;background:var(--red);color:#fff;border:none;border-radius:4px;cursor:pointer;">Cancel</button>
-              </div>` : ''}
-            </div>
-            <button class="regen-btn" onclick="regenerateImage('${img.type}', ${img.index})" ${isRegenerating ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''}><span style="margin-right:4px;">⟳</span>Regen</button>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>` : ''}
+      ${coverImg ? `
+      <div class="featured-image" style="margin-bottom:24px;">
+        <div style="max-width:280px;">
+          ${renderImage(coverImg)}
+        </div>
+      </div>` : ''}
+      ${sceneImgs.length > 0 ? `<div class="gallery">
+        ${sceneImgs.map(img => renderImage(img)).join('')}
+      </div>` : ''}
+    </div>`;
+    })() : ''}
 
     ${S.gen.log.length ? `<div class="card"><h3>Log</h3>
       <div style="font-family:monospace;font-size:11px;color:var(--dim);max-height:150px;overflow-y:auto;">
@@ -968,6 +1108,7 @@ async function runStage(stage, extraParams = {}) {
         animal: S.book.animal, theme: S.book.theme,
         lesson: S.book.lesson, setting: S.book.setting,
         tone: S.book.tone, notes: S.book.notes,
+        hard_rules: S.book.hardRules,  // Rules for images only, not story
         rhyming: S.book.rhyming,
         art_style: S.book.artStyle, trim_size: S.book.trimSize,
         formats: S.book.formats,
@@ -1299,13 +1440,128 @@ async function saveSceneText(sceneIndex) {
 }
 
 // ─── Image Regeneration ───
-async function regenerateImage(imageType, sceneIndex) {
-  const regenKey = imageType === 'spread' ? `spread_${sceneIndex}` : imageType;
+// State for regen modal
+let pendingRegen = null;
+let selectedAdditionalRefs = [];
 
-  // Prevent double-clicking while regenerating
+function showRegenModal(type, imageType, sceneIndex, imagePath, bookId) {
+  pendingRegen = { type, imageType, sceneIndex, imagePath, bookId };
+  selectedAdditionalRefs = [];
+
+  const label = imageType === 'spread' ? `Scene ${sceneIndex}` : (imageType === 'page' ? `Page ${sceneIndex}` : imageType.replace('_', ' '));
+  document.getElementById('regenModalTitle').textContent = `Regenerate ${label}`;
+  document.getElementById('regenPreviewImg').src = imagePath;
+  document.getElementById('regenFeedback').value = '';
+
+  // Populate additional references grid
+  const refsContainer = document.getElementById('regenRefsContainer');
+  const refsGrid = document.getElementById('regenRefGrid');
+  refsGrid.innerHTML = '';
+
+  let availableImages = [];
+  if (type === 'book') {
+    // Get all generated images except the one being regenerated
+    availableImages = S.gen.generatedImages
+      .filter(img => !(img.type === imageType && (imageType !== 'spread' || img.index === sceneIndex)))
+      .map(img => ({
+        path: `/api/files/${S.gen.bookId}/art/${img.path}`,
+        label: img.type === 'spread' ? `Scene ${img.index}` : img.type.replace('_', ' ')
+      }));
+    // Add character sheet if exists
+    if (S.gen.characterSheet) {
+      availableImages.unshift({
+        path: `/api/files/${S.gen.bookId}/${S.gen.characterSheet}`,
+        label: 'Char Sheet'
+      });
+    }
+  } else if (type === 'coloring') {
+    // Get all coloring pages except the one being regenerated
+    availableImages = S.coloring.pages
+      .filter(p => p.num !== sceneIndex && p.path)
+      .map(p => ({
+        path: `/api/files/${S.coloring.bookId}/${p.path}`,
+        label: `Page ${p.num}`
+      }));
+    // Add reference sheet
+    if (S.coloring.referenceSheet) {
+      availableImages.unshift({
+        path: `/api/files/${S.coloring.bookId}/${S.coloring.referenceSheet}`,
+        label: 'Style Ref'
+      });
+    }
+  }
+
+  if (availableImages.length > 0) {
+    refsContainer.style.display = 'block';
+    availableImages.forEach((img, idx) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'regen-ref-thumb';
+      thumb.dataset.path = img.path;
+      thumb.innerHTML = `
+        <img src="${img.path}?t=${Date.now()}" alt="${img.label}"/>
+        <span>${img.label}</span>
+        <div class="check">✓</div>
+      `;
+      thumb.onclick = () => toggleRefSelection(thumb, img.path);
+      refsGrid.appendChild(thumb);
+    });
+  } else {
+    refsContainer.style.display = 'none';
+  }
+
+  document.getElementById('regenModal').style.display = 'flex';
+}
+
+function toggleRefSelection(thumb, path) {
+  const idx = selectedAdditionalRefs.indexOf(path);
+  if (idx >= 0) {
+    selectedAdditionalRefs.splice(idx, 1);
+    thumb.classList.remove('selected');
+  } else {
+    selectedAdditionalRefs.push(path);
+    thumb.classList.add('selected');
+  }
+}
+
+function closeRegenModal() {
+  pendingRegen = null;
+  selectedAdditionalRefs = [];
+  document.getElementById('regenModal').style.display = 'none';
+}
+
+async function confirmRegen() {
+  if (!pendingRegen) return;
+  const { type, imageType, sceneIndex, imagePath, bookId } = pendingRegen;
+  const feedback = document.getElementById('regenFeedback').value.trim();
+  const additionalRefs = [...selectedAdditionalRefs];
+  closeRegenModal();
+
+  if (type === 'book') {
+    await doRegenerateImage(imageType, sceneIndex, imagePath, feedback, additionalRefs);
+  } else if (type === 'coloring') {
+    await doRegenerateColoringPage(sceneIndex, imagePath, feedback, additionalRefs);
+  } else if (type === 'stylesheet') {
+    await doRegenerateStyleSheet(feedback);
+  } else if (type === 'coloringcover') {
+    await doRegenerateColoringCover(sceneIndex, feedback);  // sceneIndex holds 'front' or 'back'
+  }
+}
+
+function regenerateImage(imageType, sceneIndex) {
+  const regenKey = imageType === 'spread' ? `spread_${sceneIndex}` : imageType;
   if (S.regenerating[regenKey]) return;
 
-  if (!confirm(`Regenerate the ${imageType === 'spread' ? 'Scene ' + sceneIndex : imageType.replace('_', ' ')} image?`)) return;
+  // Find current image path
+  const img = S.gen.generatedImages.find(
+    i => i.type === imageType && (imageType !== 'spread' || i.index === sceneIndex)
+  );
+  const imagePath = img ? `/api/files/${S.gen.bookId}/art/${img.path}` : '';
+
+  showRegenModal('book', imageType, sceneIndex, imagePath, S.gen.bookId);
+}
+
+async function doRegenerateImage(imageType, sceneIndex, currentImagePath, feedback, additionalRefs = []) {
+  const regenKey = imageType === 'spread' ? `spread_${sceneIndex}` : imageType;
 
   // Create AbortController for this regeneration
   const abortController = new AbortController();
@@ -1313,7 +1569,8 @@ async function regenerateImage(imageType, sceneIndex) {
 
   // Mark as regenerating
   S.regenerating[regenKey] = true;
-  S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${imageType}...`);
+  const refCount = additionalRefs.length;
+  S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${imageType}${feedback ? ' with feedback' : ''}${refCount ? ` + ${refCount} refs` : ''}...`);
   render();
 
   try {
@@ -1323,7 +1580,10 @@ async function regenerateImage(imageType, sceneIndex) {
       body: JSON.stringify({
         book_id: S.gen.bookId,
         image_type: imageType,
-        scene_index: sceneIndex
+        scene_index: sceneIndex,
+        feedback: feedback,
+        use_current_as_reference: true,
+        additional_references: additionalRefs
       }),
       signal: abortController.signal
     });
@@ -1436,7 +1696,9 @@ function vOutput() {
       <h3>Downloads</h3>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
         <a href="/api/files/${S.gen.bookId}/story_package.json" class="btn btn-secondary" download>Story JSON</a>
+        <button onclick="previewPdf('${S.gen.bookId}','Interior.pdf','Interior PDF')" class="btn btn-secondary">Preview Interior</button>
         <a href="/api/files/${S.gen.bookId}/Interior.pdf" class="btn btn-secondary" download>Interior PDF</a>
+        <button onclick="previewPdf('${S.gen.bookId}','Cover.pdf','Cover PDF')" class="btn btn-secondary">Preview Cover</button>
         <a href="/api/files/${S.gen.bookId}/Cover.pdf" class="btn btn-secondary" download>Cover PDF</a>
         <a href="/api/files/${S.gen.bookId}/Kindle_Cover.jpg" class="btn btn-secondary" download>Kindle Cover</a>
       </div>
@@ -1579,7 +1841,10 @@ function vColoringBrief() {
 
     <div class="actions">
       <button class="btn btn-ghost" onclick="go(0)">← Setup</button>
-      <button class="btn btn-primary" onclick="saveColoringBrief()">Continue to Style Sheet →</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="saveColoringBriefOnly()">Save</button>
+        <button class="btn btn-primary" onclick="saveColoringBrief()">Continue to Style Sheet →</button>
+      </div>
     </div>
   </div>`;
 }
@@ -1666,7 +1931,72 @@ async function saveColoringBrief() {
       S.coloring.bookId = r.book_id;
       S.coloring.stages.brief = 'done';
       S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Brief saved: ${r.book_id}`);
+      // Update saved state snapshot for change detection
+      S.coloringBriefSaved = getCurrentColoringBrief();
       go(2);
+    } else {
+      alert('Error: ' + (r.error || 'Unknown error'));
+    }
+  } catch(e) {
+    alert('Failed to save brief: ' + e.message);
+  }
+}
+
+// Save coloring brief without navigating away
+async function saveColoringBriefOnly() {
+  const cb = S.coloring.brief;
+  cb.title = v('coloringTitle') || `${v('coloringTheme')} Coloring Book`;
+  cb.theme = v('coloringTheme');
+  cb.themeCustom = v('coloringThemeCustom') || '';
+  cb.ageLevel = v('coloringAgeLevel');
+  cb.difficulty = v('coloringDifficulty');
+  cb.numPages = parseInt(v('coloringNumPages'));
+  cb.bookSize = v('coloringBookSize');
+  cb.notes = v('coloringNotes');
+  cb.style = v('coloringStyle') || 'bold-easy';
+  cb.customStyle = v('coloringCustomStyle') || '';
+
+  // Use custom theme if selected
+  const effectiveTheme = cb.theme === 'Custom' ? cb.themeCustom : cb.theme;
+
+  // Validate theme is not empty
+  if (!effectiveTheme || !effectiveTheme.trim()) {
+    alert('Please enter a theme.');
+    return;
+  }
+
+  // Use custom style description if custom is selected
+  const effectiveStyle = cb.style === 'custom' ? cb.customStyle : cb.style;
+
+  try {
+    const r = await api('/api/coloring/brief', {
+      title: cb.title,
+      theme: effectiveTheme,
+      ageLevel: cb.ageLevel,
+      difficulty: cb.difficulty,
+      numPages: cb.numPages,
+      bookSize: cb.bookSize,
+      notes: cb.notes,
+      style: effectiveStyle
+    });
+
+    if (r.ok) {
+      S.coloring.bookId = r.book_id;
+      S.coloring.stages.brief = 'done';
+      S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Brief saved: ${r.book_id}`);
+      // Update saved state snapshot for change detection
+      S.coloringBriefSaved = getCurrentColoringBrief();
+      // Show success feedback without navigating
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '✓ Saved';
+      btn.style.background = 'var(--green)';
+      btn.style.color = 'var(--bg)';
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 1500);
     } else {
       alert('Error: ' + (r.error || 'Unknown error'));
     }
@@ -1694,8 +2024,8 @@ function vColoringReference() {
     <div class="card">
       <h3>Style Sheet Preview</h3>
       ${refSheet ? `
-        <div style="text-align:center;margin-bottom:16px;">
-          <img src="/api/files/${refSheet}?t=${Date.now()}" style="max-width:100%;border-radius:8px;border:1px solid var(--border);"/>
+        <div class="featured-image" style="margin-bottom:16px;">
+          <img src="/api/files/${refSheet}?t=${Date.now()}" style="max-width:400px;width:100%;border-radius:10px;border:2px solid var(--border);"/>
         </div>
         <div style="display:flex;gap:10px;justify-content:center;">
           ${!approved ? `
@@ -1756,7 +2086,7 @@ function vColoringReference() {
   </div>`;
 }
 
-async function generateReference() {
+async function generateReference(feedback = '') {
   if (!S.coloring.bookId) { alert('Save brief first'); return; }
 
   // Start progress timer
@@ -1768,11 +2098,11 @@ async function generateReference() {
   }, 1000);
 
   S.coloring.stages.reference = 'running';
-  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating reference sheet...`);
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating reference sheet${feedback ? ' with feedback' : ''}...`);
   render();
 
   try {
-    const r = await api('/api/coloring/reference', { book_id: S.coloring.bookId });
+    const r = await api('/api/coloring/reference', { book_id: S.coloring.bookId, feedback: feedback });
 
     // Stop progress timer
     if (S.coloring.progressTimer) { clearInterval(S.coloring.progressTimer); S.coloring.progressTimer = null; }
@@ -1796,10 +2126,17 @@ async function generateReference() {
   render();
 }
 
-async function regenerateReference() {
+function regenerateReference() {
+  // Show feedback modal for style sheet regeneration
+  // Note: referenceSheet already includes book_id prefix (e.g., "book-123/reference_sheet.png")
+  const imagePath = S.coloring.referenceSheet ? `/api/files/${S.coloring.referenceSheet}` : '';
+  showRegenModal('stylesheet', 'Style Sheet', 0, imagePath, S.coloring.bookId);
+}
+
+async function doRegenerateStyleSheet(feedback) {
   S.coloring.referenceApproved = false;
   S.coloring.referenceSheet = null;
-  await generateReference();
+  await generateReference(feedback);
 }
 
 async function approveReference() {
@@ -1985,17 +2322,25 @@ async function cancelColoringPages() {
   render();
 }
 
-async function regenerateColoringPage(pageNum) {
-  // Prevent double-clicking while regenerating
+function regenerateColoringPage(pageNum) {
   if (S.coloring.regenerating[pageNum]) return;
 
+  // Find current page image path
+  const page = S.coloring.pages.find(p => p.num === pageNum);
+  const imagePath = page && page.path ? `/api/files/${S.coloring.bookId}/${page.path}` : '';
+
+  showRegenModal('coloring', 'page', pageNum, imagePath, S.coloring.bookId);
+}
+
+async function doRegenerateColoringPage(pageNum, currentImagePath, feedback, additionalRefs = []) {
   // Create AbortController for this regeneration
   const abortController = new AbortController();
   S.regenAbortControllers[`coloring_${pageNum}`] = abortController;
 
   // Mark as regenerating
   S.coloring.regenerating[pageNum] = true;
-  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating page ${pageNum}...`);
+  const refCount = additionalRefs.length;
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating page ${pageNum}${feedback ? ' with feedback' : ''}${refCount ? ` + ${refCount} refs` : ''}...`);
   render();
 
   try {
@@ -2004,7 +2349,10 @@ async function regenerateColoringPage(pageNum) {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         book_id: S.coloring.bookId,
-        page_num: pageNum
+        page_num: pageNum,
+        feedback: feedback,
+        use_current_as_reference: true,
+        additional_references: additionalRefs
       }),
       signal: abortController.signal
     });
@@ -2066,24 +2414,24 @@ function vColoringCover() {
     <div class="card">
       <h3>Cover Preview</h3>
       <div class="row">
-        <div style="text-align:center;">
+        <div style="text-align:center;flex:1;max-width:320px;">
           <p style="font-size:12px;color:var(--dim);margin-bottom:8px;">Front Cover</p>
           ${S.coloring.cover ? `
-            <img src="/api/files/${S.coloring.cover}?t=${Date.now()}" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border);"/>
+            <img src="/api/files/${S.coloring.cover}?t=${Date.now()}" style="width:100%;max-width:280px;border-radius:10px;border:2px solid var(--border);"/>
             <button class="btn btn-secondary" style="margin-top:8px;" onclick="regenerateColoringCover('front')"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;font-size:16px;">⟳</span>Regenerate</button>
           ` : `
-            <div style="height:200px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dim);">
+            <div style="height:200px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--dim);">
               Not generated yet
             </div>
           `}
         </div>
-        <div style="text-align:center;">
+        <div style="text-align:center;flex:1;max-width:320px;">
           <p style="font-size:12px;color:var(--dim);margin-bottom:8px;">Back Cover</p>
           ${S.coloring.backCover ? `
-            <img src="/api/files/${S.coloring.backCover}?t=${Date.now()}" style="max-width:100%;max-height:300px;border-radius:8px;border:1px solid var(--border);"/>
+            <img src="/api/files/${S.coloring.backCover}?t=${Date.now()}" style="width:100%;max-width:280px;border-radius:10px;border:2px solid var(--border);"/>
             <button class="btn btn-secondary" style="margin-top:8px;" onclick="regenerateColoringCover('back')"><span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;margin-right:6px;font-size:16px;">⟳</span>Regenerate</button>
           ` : `
-            <div style="height:200px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dim);">
+            <div style="height:200px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--dim);">
               Not generated yet
             </div>
           `}
@@ -2106,19 +2454,23 @@ function vColoringCover() {
   </div>`;
 }
 
-async function generateColoringCovers() {
+async function generateColoringCovers(feedback = '', coverType = '') {
   if (!S.coloring.bookId) return;
 
   S.coloring.stages.cover = 'running';
-  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating covers...`);
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Generating covers${feedback ? ' with feedback' : ''}...`);
   render();
 
   try {
-    const r = await api('/api/coloring/cover', { book_id: S.coloring.bookId });
+    const r = await api('/api/coloring/cover', {
+      book_id: S.coloring.bookId,
+      feedback: feedback,
+      cover_type: coverType  // 'front', 'back', or '' for both
+    });
 
     if (r.ok) {
-      S.coloring.cover = r.cover;
-      S.coloring.backCover = r.back_cover;
+      if (r.cover) S.coloring.cover = r.cover;
+      if (r.back_cover) S.coloring.backCover = r.back_cover;
       S.coloring.stages.cover = 'done';
       S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Covers generated`);
     } else {
@@ -2132,9 +2484,16 @@ async function generateColoringCovers() {
   render();
 }
 
-async function regenerateColoringCover(type) {
-  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${type} cover...`);
-  await generateColoringCovers();
+function regenerateColoringCover(type) {
+  // Show feedback modal for cover regeneration
+  const coverPath = type === 'front' ? S.coloring.cover : S.coloring.backCover;
+  const imagePath = coverPath ? `/api/files/${S.coloring.bookId}/${coverPath}` : '';
+  showRegenModal('coloringcover', type === 'front' ? 'Front Cover' : 'Back Cover', type, imagePath, S.coloring.bookId);
+}
+
+async function doRegenerateColoringCover(coverType, feedback) {
+  S.coloring.log.push(`[${new Date().toLocaleTimeString()}] Regenerating ${coverType} cover${feedback ? ' with feedback' : ''}...`);
+  await generateColoringCovers(feedback, coverType);
 }
 
 // ─── Coloring Step 6: Format & Price ───
@@ -2177,8 +2536,10 @@ function vColoringFormat() {
         ${S.coloring.stages.pdf==='running' ? '<span class="spinner"></span> Building...' : S.coloring.stages.pdf==='done' ? '✓ PDFs Built — Rebuild' : 'Build PDFs'}
       </button>
       ${S.coloring.stages.pdf==='done' ? `
-      <div style="margin-top:12px;display:flex;gap:8px;">
+      <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
+        <button onclick="previewPdf('${S.coloring.bookId}','Interior.pdf','Interior PDF')" class="btn btn-secondary">Preview Interior</button>
         <a href="/api/files/${S.coloring.bookId}/Interior.pdf" class="btn btn-secondary" download>Download Interior</a>
+        <button onclick="previewPdf('${S.coloring.bookId}','Cover.pdf','Cover PDF')" class="btn btn-secondary">Preview Cover</button>
         <a href="/api/files/${S.coloring.bookId}/Cover.pdf" class="btn btn-secondary" download>Download Cover</a>
       </div>
       ` : ''}
@@ -2257,7 +2618,9 @@ function vColoringPublish() {
     <div class="card">
       <h3>Downloads</h3>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button onclick="previewPdf('${S.coloring.bookId}','Interior.pdf','Interior PDF')" class="btn btn-secondary">Preview Interior</button>
         <a href="/api/files/${S.coloring.bookId}/Interior.pdf" class="btn btn-secondary" download>Interior PDF</a>
+        <button onclick="previewPdf('${S.coloring.bookId}','Cover.pdf','Cover PDF')" class="btn btn-secondary">Preview Cover</button>
         <a href="/api/files/${S.coloring.bookId}/Cover.pdf" class="btn btn-secondary" download>Cover PDF</a>
         <a href="/api/files/${S.coloring.bookId}/Kindle_Cover.jpg" class="btn btn-secondary" download>Kindle Cover</a>
       </div>
@@ -2311,11 +2674,54 @@ function startNewColoringBook() {
 
 function bind() {}
 
+// ─── PDF Preview ───
+function previewPdf(bookId, filename, title) {
+  document.getElementById('pdfModalTitle').textContent = title || 'PDF Preview';
+  document.getElementById('pdfFrame').src = `/api/files/${bookId}/${filename}`;
+  document.getElementById('pdfModal').style.display = 'flex';
+}
+
+function closePdfModal() {
+  document.getElementById('pdfFrame').src = '';
+  document.getElementById('pdfModal').style.display = 'none';
+}
+
 // ─── Init ───
 (async () => {
   await checkStatus();
   render();
 })();
 </script>
+
+<!-- PDF Preview Modal -->
+<div id="pdfModal" class="pdf-modal" onclick="if(event.target===this)closePdfModal()">
+  <div class="pdf-modal-content">
+    <div class="pdf-modal-header">
+      <h3 id="pdfModalTitle">PDF Preview</h3>
+      <button onclick="closePdfModal()" class="btn btn-ghost" style="padding:4px 12px;">Close</button>
+    </div>
+    <iframe id="pdfFrame" src=""></iframe>
+  </div>
+</div>
+
+<!-- Regen Feedback Modal -->
+<div id="regenModal" class="regen-modal" onclick="if(event.target===this)closeRegenModal()">
+  <div class="regen-modal-content">
+    <h3 id="regenModalTitle">Regenerate Image</h3>
+    <p>The current image (highlighted) will be used as the primary reference. Select additional images below for style guidance.</p>
+    <div class="regen-modal-preview">
+      <img id="regenPreviewImg" src="" alt="Current image"/>
+    </div>
+    <div class="regen-refs" id="regenRefsContainer" style="display:none;">
+      <h4>Additional References (click to select)</h4>
+      <div class="regen-refs-grid" id="regenRefGrid"></div>
+    </div>
+    <textarea id="regenFeedback" placeholder="e.g., Make the background brighter, add more detail to the face, make this character look more like Scene 2..."></textarea>
+    <div class="regen-modal-actions">
+      <button onclick="closeRegenModal()" class="btn btn-ghost">Cancel</button>
+      <button onclick="confirmRegen()" class="btn btn-primary">Regenerate</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

@@ -258,9 +258,15 @@ def api_art():
     if "no people" in user_notes.lower() or "no human" in user_notes.lower():
         restrictions += " Only show the animal character(s), no humans."
 
-    # Build prompts with style, character, and restrictions
+    # Hard rules from brief (apply to ALL image prompts, NOT story)
+    hard_rules = brief.get('hard_rules', '').strip()
+
+    # Build prompts with style, character, restrictions, and hard rules
     def build_prompt(base_prompt):
         prompt = base_prompt
+        # Inject hard rules at the TOP - must be followed strictly
+        if hard_rules:
+            prompt = f"=== STRICT RULES - MUST FOLLOW ===\n{hard_rules}\n=== END STRICT RULES ===\n\n{prompt}"
         if art_style:
             # Extract just the positive style elements (remove any NOT statements)
             style_clean = ' '.join([s for s in art_style.split('.') if 'NOT' not in s.upper()])
@@ -296,7 +302,8 @@ def api_art():
         "eye_style": eye_style,
         "character_block": character_block,
         "restrictions": restrictions,
-        "reference_image": reference_image
+        "reference_image": reference_image,
+        "hard_rules": hard_rules
     }
 
     art_dir = book_dir / "art"
@@ -310,14 +317,16 @@ def api_art():
         current = 0
 
         try:
-            # Initialize pipeline with art style, eye style, and reference image from the brief
+            # Initialize pipeline with art style, eye style, reference image, and hard rules from the brief
             art_style_for_pipeline = art_package.get('art_style', '')
             eye_style_for_pipeline = art_package.get('eye_style', '')
             reference_image_for_pipeline = art_package.get('reference_image', '')
+            hard_rules_for_pipeline = art_package.get('hard_rules', '')
             pipeline = ArtPipeline(
                 style=art_style_for_pipeline,
                 eye_style=eye_style_for_pipeline,
-                reference_image=reference_image_for_pipeline
+                reference_image=reference_image_for_pipeline,
+                hard_rules=hard_rules_for_pipeline
             )
             results = {
                 "success": False,
@@ -328,12 +337,14 @@ def api_art():
                 "failed_images": []
             }
 
-            # Character sheet
+            # Character sheets (main + recurring characters)
             current += 1
             yield f"data: {json.dumps({'stage': 'character_sheet', 'current': current, 'total': total_images, 'message': 'Generating character sheet...'})}\n\n"
 
             char_sheet_path = art_dir / "character_sheets" / f"{art_package['character_name']}_sheet.png"
             char_sheet_path.parent.mkdir(parents=True, exist_ok=True)
+            char_name = art_package["character_name"]
+            all_character_sheets = {}  # Store all character sheets
 
             try:
                 _, char_path = pipeline.generate_character_sheet(
@@ -342,12 +353,47 @@ def api_art():
                     style=art_style_for_pipeline
                 )
                 results["character_sheet"] = str(char_path)
-                char_name = art_package["character_name"]
+                all_character_sheets[char_name] = char_path
                 yield f"data: {json.dumps({'stage': 'character_sheet_done', 'current': current, 'total': total_images, 'message': 'Character sheet complete!', 'image_path': f'character_sheets/{char_name}_sheet.png'})}\n\n"
+
+                # Extract recurring characters from scenes
+                spreads = art_package.get('spreads', [])
+                if spreads:
+                    yield f"data: {json.dumps({'stage': 'analyzing_characters', 'current': current, 'total': total_images, 'message': 'Analyzing scenes for recurring characters...'})}\n\n"
+                    recurring_chars = pipeline.extract_recurring_characters(spreads, char_name)
+
+                    # Generate sheets for recurring characters
+                    for rc_name, rc_info in recurring_chars.items():
+                        yield f"data: {json.dumps({'stage': 'secondary_character', 'current': current, 'total': total_images, 'message': f'Generating character sheet for {rc_name}...'})}\n\n"
+                        try:
+                            safe_name = "".join(c if c.isalnum() else "_" for c in rc_name)
+                            rc_sheet_path = art_dir / "character_sheets" / f"{safe_name}_sheet.png"
+
+                            rc_desc = f"""Secondary character for children's book:
+Name: {rc_name}
+Description: {rc_info['description']}
+
+This character appears alongside {char_name} in scenes {rc_info['scenes']}.
+Create a consistent character sheet showing various poses and expressions."""
+
+                            _, rc_path = pipeline.generate_character_sheet(
+                                rc_desc,
+                                rc_sheet_path,
+                                style=art_style_for_pipeline
+                            )
+                            all_character_sheets[rc_name] = rc_path
+                            yield f"data: {json.dumps({'stage': 'secondary_character_done', 'current': current, 'total': total_images, 'message': f'{rc_name} character sheet complete!', 'image_path': f'character_sheets/{safe_name}_sheet.png'})}\n\n"
+                        except Exception as e:
+                            log.warning(f"Failed to generate character sheet for {rc_name}: {e}")
+                            yield f"data: {json.dumps({'stage': 'secondary_character_error', 'current': current, 'total': total_images, 'message': f'{rc_name} sheet failed: {str(e)}'})}\n\n"
+
             except Exception as e:
                 results["failed_images"].append(f"character_sheet: {str(e)}")
                 yield f"data: {json.dumps({'stage': 'character_sheet_error', 'current': current, 'total': total_images, 'message': f'Character sheet failed: {str(e)}'})}\n\n"
                 char_path = None
+
+            # Store all character sheets in results
+            results["all_character_sheets"] = {name: str(path) for name, path in all_character_sheets.items()}
 
             # Cover
             current += 1
@@ -467,6 +513,7 @@ def api_charsheet():
     art_style = brief.get('art_style', '')
     eye_style = brief.get('eye_style', '')
     reference_image = brief.get('reference_image', '')
+    hard_rules = brief.get('hard_rules', '')
 
     # Build character description
     char_desc = character.get('sheet_prompt', character.get('description', ''))
@@ -488,7 +535,8 @@ def api_charsheet():
             pipeline = ArtPipeline(
                 style=art_style,
                 eye_style=eye_style,
-                reference_image=reference_image
+                reference_image=reference_image,
+                hard_rules=hard_rules
             )
 
             yield f"data: {json.dumps({'stage': 'charsheet_start', 'message': 'Generating character sheet...'})}\n\n"
@@ -620,8 +668,14 @@ def api_illustrations():
         if "no people" in user_notes.lower() or "no human" in user_notes.lower():
             restrictions += " Only show the animal character(s), no humans."
 
+    # Hard rules from brief (apply to ALL image prompts, NOT story)
+    hard_rules = brief.get('hard_rules', '').strip()
+
     def build_prompt(base_prompt):
         prompt = base_prompt
+        # Inject hard rules at the TOP - must be followed strictly
+        if hard_rules:
+            prompt = f"=== STRICT RULES - MUST FOLLOW ===\n{hard_rules}\n=== END STRICT RULES ===\n\n{prompt}"
         if art_style:
             style_clean = ' '.join([s for s in art_style.split('.') if 'NOT' not in s.upper()])
             prompt = f"{style_clean}\n\n{prompt}"
@@ -653,7 +707,8 @@ def api_illustrations():
             pipeline = ArtPipeline(
                 style=art_style,
                 eye_style=eye_style,
-                reference_image=reference_image
+                reference_image=reference_image,
+                hard_rules=hard_rules
             )
 
             # Load character visual guide if available
@@ -787,7 +842,7 @@ def api_story_update():
 
 @app.route('/api/regenerate-image', methods=['POST'])
 def api_regenerate_image():
-    """Regenerate a single image."""
+    """Regenerate a single image with optional feedback."""
     try:
         from agents.art_pipeline import ArtPipeline
 
@@ -795,6 +850,9 @@ def api_regenerate_image():
         book_id = data.get("book_id")
         image_type = data.get("image_type")  # 'spread', 'cover', 'character_sheet'
         scene_index = data.get("scene_index", 1)  # 1-based
+        feedback = data.get("feedback", "")  # User feedback for regeneration
+        use_current_as_reference = data.get("use_current_as_reference", False)
+        additional_references = data.get("additional_references", [])  # Extra reference image URLs
 
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
@@ -818,6 +876,7 @@ def api_regenerate_image():
         metadata = story_data.get('metadata', {})
         brief = metadata.get('brief', {})
         art_style = brief.get('art_style', '')
+        hard_rules = brief.get('hard_rules', '')
 
         # Find character sheet path
         char_name = character.get('name', 'Character')
@@ -835,8 +894,19 @@ def api_regenerate_image():
             else:
                 return jsonify({"ok": False, "error": "No character sheet found. Generate art first."}), 400
 
+        # Convert additional reference URLs to local paths
+        extra_refs = []
+        for ref_url in additional_references:
+            # URLs like /api/files/ChildrensBook/Title-123/art/scene_01.png
+            if ref_url.startswith('/api/files/'):
+                rel_path = ref_url.replace('/api/files/', '')
+                local_path = OUTPUT_DIR / rel_path
+                if local_path.exists():
+                    extra_refs.append(local_path)
+                    log.info(f"Added additional reference: {local_path}")
+
         # Initialize pipeline
-        pipeline = ArtPipeline(style=art_style)
+        pipeline = ArtPipeline(style=art_style, hard_rules=hard_rules)
 
         if image_type == 'spread':
             if scene_index < 1 or scene_index > len(scenes):
@@ -846,14 +916,26 @@ def api_regenerate_image():
             scene_desc = scene.get('illustration_prompt', '')
             output_path = art_dir / f"scene_{scene_index:02d}.png"
 
-            # Use fix_image method
+            # Add feedback to description if provided
+            if feedback:
+                scene_desc = f"{scene_desc}\n\n=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ==="
+
+            # Add note about additional references
+            if extra_refs:
+                scene_desc += f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the {len(extra_refs)} additional reference images to match style and consistency."
+
+            # Choose reference image: current image or character sheet
+            reference_image = output_path if use_current_as_reference and output_path.exists() else char_sheet_path
+
+            # Use fix_image method with additional references
             success, result = pipeline.fix_image(
                 f"scene_{scene_index:02d}.png",
-                char_sheet_path,
+                reference_image,
                 scene_desc,
                 illustration_type="spread",
                 output_dir=book_dir,
-                style=art_style
+                style=art_style,
+                additional_references=extra_refs
             )
 
             if success:
@@ -869,12 +951,24 @@ def api_regenerate_image():
             cover_scene = scenes[0].get('illustration_prompt', '') if scenes else ''
             output_path = art_dir / "cover.png"
 
+            # Add feedback to description if provided
+            if feedback:
+                cover_scene = f"{cover_scene}\n\n=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ==="
+
+            # Add note about additional references
+            if extra_refs:
+                cover_scene += f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the {len(extra_refs)} additional reference images to match style and consistency."
+
+            # Choose reference image: current image or character sheet
+            reference_image = output_path if use_current_as_reference and output_path.exists() else char_sheet_path
+
             _, _ = pipeline.generate_illustration(
                 cover_scene,
-                char_sheet_path,
+                reference_image,
                 illustration_type="cover",
                 output_path=output_path,
-                style=art_style
+                style=art_style,
+                additional_references=extra_refs
             )
 
             return jsonify({
@@ -886,6 +980,10 @@ def api_regenerate_image():
         elif image_type == 'character_sheet':
             char_desc = character.get('sheet_prompt', character.get('description', ''))
             output_path = char_sheet_path
+
+            # Add feedback to description if provided
+            if feedback:
+                char_desc = f"{char_desc}\n\n=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ==="
 
             _, _ = pipeline.generate_character_sheet(
                 char_desc,
@@ -1137,6 +1235,7 @@ def api_coloring_reference():
 
         data = request.json
         book_id = data.get("book_id")
+        feedback = data.get("feedback", "")  # User feedback for regeneration
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
 
@@ -1153,16 +1252,23 @@ def api_coloring_reference():
         log.info(f"=== COLORING REFERENCE DEBUG ===")
         log.info(f"brief_data keys: {list(brief_data.keys())}")
         log.info(f"brief_data['style']: {brief_data.get('style', 'NOT FOUND - defaulting to bold-easy')}")
+        if feedback:
+            log.info(f"feedback: {feedback}")
         log.info(f"=== END DEBUG ===")
 
         # Create style brief with fallback for empty theme
         theme = brief_data.get('theme', '').strip() or 'General'
 
+        # Combine notes with feedback if provided
+        notes = brief_data.get('notes', '')
+        if feedback:
+            notes = f"{notes}\n\n=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ===" if notes else f"=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ==="
+
         style_brief = StyleBrief(
             theme=theme,
             age_level=brief_data.get('ageLevel', 'adult'),
             difficulty=brief_data.get('difficulty', 'medium'),
-            notes=brief_data.get('notes', ''),
+            notes=notes,
             reference_image=brief_data.get('referenceImage'),
             style=brief_data.get('style', 'bold-easy')
         )
@@ -1398,7 +1504,7 @@ def api_coloring_pages():
 
 @app.route('/api/coloring/regenerate', methods=['POST'])
 def api_coloring_regenerate():
-    """Regenerate a single coloring page."""
+    """Regenerate a single coloring page with optional feedback and additional references."""
     try:
         from agents.coloring_page_generator import ColoringPageGenerator, PageConfig
         from agents.coloring_qa_checker import ColoringQAChecker
@@ -1406,6 +1512,9 @@ def api_coloring_regenerate():
         data = request.json
         book_id = data.get("book_id")
         page_num = data.get("page_num", 1)
+        feedback = data.get("feedback", "")  # User feedback for regeneration
+        use_current_as_reference = data.get("use_current_as_reference", False)
+        additional_references = data.get("additional_references", [])  # Extra reference image paths
 
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
@@ -1414,6 +1523,8 @@ def api_coloring_regenerate():
         brief_path = book_dir / "coloring_brief.json"
         ref_path = book_dir / "reference_sheet.png"
         concepts_path = book_dir / "page_concepts.json"
+        pages_dir = book_dir / "pages"
+        current_page_path = pages_dir / f"page_{page_num:02d}.png"
 
         if not ref_path.exists():
             return jsonify({"ok": False, "error": "Reference sheet not found"}), 400
@@ -1432,6 +1543,10 @@ def api_coloring_regenerate():
         style = brief_data.get('style', 'bold-easy')
         notes = brief_data.get('notes', '')
         concept = concepts[page_num - 1] if page_num <= len(concepts) else f"{theme} design {page_num}"
+
+        # Add feedback to concept/notes if provided
+        if feedback:
+            concept = f"{concept}\n\n=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ==="
 
         # Get previous subjects from other pages for uniqueness
         previous_subjects = []
@@ -1457,25 +1572,55 @@ def api_coloring_regenerate():
             previous_subjects=previous_subjects
         )
 
-        pages_dir = book_dir / "pages"
         output_path = pages_dir / f"page_{page_num:02d}.png"
+
+        # Build list of reference images
+        # Primary reference: current page or reference sheet
+        primary_ref = current_page_path if use_current_as_reference and current_page_path.exists() else ref_path
+
+        # Convert additional reference URLs to local paths
+        extra_refs = []
+        for ref_url in additional_references:
+            # URLs like /api/files/ColoringBook/Title-123/pages/page_01.png
+            if ref_url.startswith('/api/files/'):
+                rel_path = ref_url.replace('/api/files/', '')
+                local_path = OUTPUT_DIR / rel_path
+                if local_path.exists():
+                    extra_refs.append(local_path)
+                    log.info(f"Added additional reference: {local_path}")
 
         generator = ColoringPageGenerator()
         qa_checker = ColoringQAChecker()
 
-        success, path = generator.generate_page(config, ref_path, output_path)
+        # Generate with additional references if provided
+        success, path = generator.generate_page(
+            config,
+            primary_ref,
+            output_path,
+            additional_references=extra_refs
+        )
 
         if success:
-            qa_result = qa_checker.check_page(path, age_level, difficulty, theme)
+            # Run QA but don't fail regeneration on QA failure
+            # User explicitly requested this regeneration, so trust their judgment
+            try:
+                qa_result = qa_checker.check_page(path, age_level, difficulty, theme)
+                qa_passed = qa_result.passed
+                qa_scores = qa_result.scores
+            except Exception as qa_error:
+                log.warning(f"QA check failed: {qa_error}")
+                qa_passed = None
+                qa_scores = {}
+
             return jsonify({
                 "ok": True,
                 "page_num": page_num,
                 "image_path": f"pages/page_{page_num:02d}.png",
-                "qa_passed": qa_result.passed,
-                "qa_scores": qa_result.scores
+                "qa_passed": qa_passed,
+                "qa_scores": qa_scores
             })
         else:
-            return jsonify({"ok": False, "error": "Page regeneration failed"}), 500
+            return jsonify({"ok": False, "error": "Image generation failed - API error"}), 500
 
     except Exception as e:
         log.exception("Page regeneration failed")
@@ -1490,6 +1635,8 @@ def api_coloring_cover():
 
         data = request.json
         book_id = data.get("book_id")
+        feedback = data.get("feedback", "")  # User feedback for regeneration
+        cover_type = data.get("cover_type", "")  # 'front', 'back', or '' for both
         if not book_id:
             return jsonify({"ok": False, "error": "No book_id provided"}), 400
 
@@ -1513,6 +1660,11 @@ def api_coloring_cover():
 
         cfg = load_config()
 
+        # Combine notes with feedback if provided
+        notes = brief_data.get('notes', '')
+        if feedback:
+            notes = f"{notes}\n\n=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ===" if notes else f"=== USER FEEDBACK FOR REGENERATION ===\n{feedback}\n=== END FEEDBACK ==="
+
         cover_brief = CoverBrief(
             title=brief_data.get('title', 'Coloring Book'),
             theme=brief_data.get('theme', 'General'),
@@ -1520,7 +1672,7 @@ def api_coloring_cover():
             difficulty=brief_data.get('difficulty', 'medium'),
             subtitle=brief_data.get('subtitle', ''),
             author=cfg.get('defaults', {}).get('author_name', 'Creative Studio'),
-            notes=brief_data.get('notes', ''),
+            notes=notes,
             style=brief_data.get('style', 'bold-easy')
         )
 

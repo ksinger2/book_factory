@@ -521,8 +521,10 @@ class PDFBuilder:
         target_height_in: float
     ) -> PILImage.Image:
         """
-        Center-crop image to target dimensions.
-        Scales first to ensure full coverage, then crops from center.
+        Fit image to target dimensions WITHOUT cropping.
+
+        This ensures the main design is never cut off.
+        If aspect ratios don't match, white space is added on sides.
         """
         # Convert inches to pixels (DPI is already pixels per inch)
         target_width = int(target_width_in * self.COLOR_QUALITY_DPI)
@@ -532,25 +534,26 @@ class PDFBuilder:
         img_aspect = img.width / img.height
         target_aspect = target_width / target_height
 
+        # Scale to FIT (not fill) - entire image fits within target
         if img_aspect > target_aspect:
-            # Image is wider - scale by height
-            new_height = target_height
-            new_width = int(new_height * img_aspect)
-        else:
-            # Image is taller - scale by width
+            # Image is wider than target - fit by width
             new_width = target_width
             new_height = int(new_width / img_aspect)
+        else:
+            # Image is taller than target - fit by height
+            new_height = target_height
+            new_width = int(new_height * img_aspect)
 
         # Resize
         img = img.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
 
-        # Crop from center
-        left = (new_width - target_width) // 2
-        top = (new_height - target_height) // 2
-        right = left + target_width
-        bottom = top + target_height
+        # Create white background at target size and paste image centered
+        result = PILImage.new('RGB', (target_width, target_height), (255, 255, 255))
+        paste_x = (target_width - new_width) // 2
+        paste_y = (target_height - new_height) // 2
+        result.paste(img, (paste_x, paste_y))
 
-        return img.crop((left, top, right, bottom))
+        return result
 
     def _resize_for_cover(
         self,

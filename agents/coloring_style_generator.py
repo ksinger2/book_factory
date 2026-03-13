@@ -26,49 +26,61 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Age level specifications (imported from skill guide)
+# Age level specifications with explicit sizing requirements
 AGE_SPECS = {
     "kid": {
         "line_weight": "4-6pt thick bold lines",
-        "planes": "3-8 planes per object",
-        "areas": "Extra large coloring areas",
+        "section_count": "5-10 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 1.5 inches across",
+        "line_spacing": "Lines must be at least 0.5 inch apart",
         "content": "Simple animals, basic objects, cartoon characters",
-        "description": "Ages 3-6, very simple shapes with thick outlines"
+        "description": "Ages 3-6, very simple shapes with thick outlines",
+        "avoid": "NO intricate patterns, NO textures, NO overlapping elements, NO small details"
     },
     "tween": {
         "line_weight": "2-4pt medium lines",
-        "planes": "10-20 planes per object",
-        "areas": "Medium sized coloring areas",
+        "section_count": "15-25 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 0.75 inch across",
+        "line_spacing": "Lines must be at least 0.25 inch apart",
         "content": "Characters, simple scenes, beginner patterns",
-        "description": "Ages 7-12, moderate detail with clear shapes"
+        "description": "Ages 7-12, moderate detail with clear shapes",
+        "avoid": "NO dense patterns, NO very small sections, NO overlapping complex shapes"
     },
     "teen": {
         "line_weight": "1-2pt finer lines",
-        "planes": "20-40 planes per object",
-        "areas": "Varied size coloring areas",
+        "section_count": "30-50 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 0.5 inch across",
+        "line_spacing": "Lines must be at least 0.15 inch apart",
         "content": "Fantasy, anime-style, detailed characters",
-        "description": "Ages 13-17, detailed with intricate elements"
+        "description": "Ages 13-17, detailed with intricate elements",
+        "avoid": "NO micro-detail patterns, NO sections smaller than a pencil eraser"
     },
     "ya": {
         "line_weight": "0.5-1.5pt fine detailed lines",
-        "planes": "30-50 planes per object",
-        "areas": "Mix of large and detailed small areas",
+        "section_count": "50-80 total sections on the entire page",
+        "min_area_size": "Most areas at least 0.25 inch across",
+        "line_spacing": "Lines must be at least 0.1 inch apart",
         "content": "Artistic, trendy themes, sophisticated designs",
-        "description": "Ages 18-25, sophisticated artistic style"
+        "description": "Ages 18-25, sophisticated artistic style",
+        "avoid": "NO eye-straining micro-details"
     },
     "adult": {
         "line_weight": "0.25-1pt very fine intricate lines",
-        "planes": "40-80+ planes per object",
-        "areas": "Many small detailed sections",
+        "section_count": "80-150+ total sections on the entire page",
+        "min_area_size": "Areas can be as small as 0.1 inch",
+        "line_spacing": "Lines can be 0.05 inch apart or closer",
         "content": "Mandalas, botanicals, architecture, complex patterns",
-        "description": "Ages 26-55, highly intricate designs"
+        "description": "Ages 26-55, highly intricate designs",
+        "avoid": "Generally no restrictions - intricate detail is expected"
     },
     "elder": {
         "line_weight": "1.5-3pt medium-bold clear lines",
-        "planes": "15-30 planes per object",
-        "areas": "Larger, well-defined areas",
+        "section_count": "15-30 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 0.75 inch across",
+        "line_spacing": "Lines must be at least 0.3 inch apart",
         "content": "Nostalgic themes, nature, relaxing scenes",
-        "description": "Ages 55+, clear shapes with moderate detail"
+        "description": "Ages 55+, clear shapes with moderate detail",
+        "avoid": "NO fine details, NO dense patterns, NO small sections, NO eye strain"
     }
 }
 
@@ -89,23 +101,50 @@ THEME_GUIDELINES = {
     "custom": "Follow the specific theme description provided"
 }
 
-# Difficulty modifiers
+# Difficulty modifiers - EXPLICIT rules for what makes coloring easier/harder
 DIFFICULTY_MODS = {
     "easy": {
-        "plane_mod": 0.5,
-        "description": "Reduce complexity by 50%, wider coloring areas, thicker lines"
+        "multiplier": 0.5,
+        "description": "Reduce complexity by 50%, wider coloring areas, thicker lines",
+        "explicit_rules": [
+            "MAXIMUM 10-15 distinct coloring sections for the ENTIRE page",
+            "Every coloring area must be LARGE - at least 1 inch across",
+            "Lines must be THICK and BOLD - easy to see and stay within",
+            "NO intricate patterns or textures inside shapes",
+            "NO overlapping or layered elements",
+            "Simple, clean outlines only",
+            "Leave GENEROUS white space between elements"
+        ]
     },
     "medium": {
-        "plane_mod": 1.0,
-        "description": "Standard specifications for age level"
+        "multiplier": 1.0,
+        "description": "Standard specifications for age level",
+        "explicit_rules": [
+            "Balanced complexity appropriate for age level",
+            "Mix of larger and medium-sized coloring areas",
+            "Some decorative detail but not overwhelming",
+            "Clear distinction between different elements"
+        ]
     },
     "hard": {
-        "plane_mod": 1.5,
-        "description": "Increase complexity by 50%, add fine details"
+        "multiplier": 1.5,
+        "description": "Increase complexity by 50%, add fine details",
+        "explicit_rules": [
+            "More detailed and intricate than standard",
+            "Include decorative patterns within shapes",
+            "Finer line work with more sections",
+            "Some challenging small areas mixed with medium ones"
+        ]
     },
     "expert": {
-        "plane_mod": 2.0,
-        "description": "Double complexity, maximum intricacy"
+        "multiplier": 2.0,
+        "description": "Double complexity, maximum intricacy",
+        "explicit_rules": [
+            "Maximum intricacy and detail",
+            "Dense patterns and textures throughout",
+            "Many small, precise coloring sections",
+            "Fine line work requiring steady hand"
+        ]
     }
 }
 

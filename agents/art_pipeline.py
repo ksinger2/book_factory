@@ -53,7 +53,7 @@ class ArtPipeline:
     # Default style only used when no style is provided
     DEFAULT_STYLE = "Soft watercolor children's book illustration with gentle colors and warm, friendly aesthetic. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image."
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None, qa_first_only: bool = True):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None, qa_first_only: bool = True, hard_rules: Optional[str] = None):
         """
         Initialize the ArtPipeline.
 
@@ -64,6 +64,7 @@ class ArtPipeline:
             style: Art style to use for all generations. If None, must be provided per-method call.
             eye_style: Specific eye style instructions for character consistency.
             reference_image: Base64 data URL of a reference image for character design.
+            hard_rules: Strict rules that must be followed in ALL image generation (e.g., "NO ONE WEARS GREEN").
 
         Raises:
             ValueError: If no API key is provided and OPENAI_API_KEY env var is not set.
@@ -82,6 +83,7 @@ class ArtPipeline:
         self.style = style  # Store style at instance level
         self.eye_style = eye_style  # Store eye style for consistency
         self.reference_image = reference_image  # Store reference image for character design
+        self.hard_rules = hard_rules  # Strict rules for ALL images (e.g., "NO GREEN CLOTHING")
         self.character_visual_guide = None  # Detailed description extracted from character sheet
         self.character_sheet_path = None  # Path to generated character sheet for scene references
 
@@ -217,6 +219,7 @@ EYES:
 - Size: [large/medium relative to face]
 - Color: [specific shade like "warm chocolate brown" or "bright emerald green"]
 - Style: [cartoon dot eyes/detailed with whites and iris/anime style - CRITICAL for consistency]
+- Highlights: [describe the white highlight dots in the eyes - position, size, number - CRITICAL for consistency]
 
 NOSE: [button/straight/upturned - specific shape AND size]
 
@@ -348,6 +351,25 @@ Keep descriptions concise but EXACT. Every detail you specify will be used to ma
         logger.warning(f"Rate limited. Waiting {wait_time} seconds before retry...")
         time.sleep(wait_time)
 
+    def _add_hard_rules(self, prompt: str) -> str:
+        """
+        Add hard rules to prompt if any are set.
+
+        Args:
+            prompt: Original prompt text
+
+        Returns:
+            Prompt with hard rules prepended if they exist
+        """
+        if self.hard_rules and self.hard_rules.strip():
+            rules_block = (
+                f"=== STRICT RULES - MUST FOLLOW ===\n"
+                f"{self.hard_rules.strip()}\n"
+                f"=== END STRICT RULES ===\n\n"
+            )
+            return rules_block + prompt
+        return prompt
+
     def _add_eye_safety_instructions(self, prompt: str, eye_style: str = None) -> str:
         """
         Add critical eye consistency instructions to prompt.
@@ -359,16 +381,192 @@ Keep descriptions concise but EXACT. Every detail you specify will be used to ma
         Returns:
             Prompt with eye safety instructions prepended
         """
+        # Always include the eye highlight requirement - this is what QA checks for
+        highlight_requirement = (
+            "Eyes must have large, round irises with TWO small bright white highlight dots "
+            "(one larger, one smaller) to show life and expression. Eyes should NOT be solid black."
+        )
+
         if eye_style:
-            eye_instructions = f"CRITICAL — CHARACTER EYES: {eye_style}\n\n"
+            eye_instructions = f"CRITICAL — CHARACTER EYES: {eye_style}. {highlight_requirement}\n\n"
         else:
-            # Generic instruction to match character sheet
+            # Generic instruction to match character sheet with highlight requirement
             eye_instructions = (
-                "CRITICAL — CHARACTER EYES: Must match EXACTLY the same eye style "
-                "as shown in the character reference sheet. Same shape, same color, "
-                "same level of detail. Do NOT change the eye design.\n\n"
+                f"CRITICAL — CHARACTER EYES: Must match EXACTLY the same eye style "
+                f"as shown in the character reference sheet. Same shape, same color, "
+                f"same level of detail. {highlight_requirement}\n\n"
             )
         return eye_instructions + prompt
+
+    def extract_recurring_characters(self, scenes: List[dict], main_character: str) -> dict:
+        """
+        Analyze scenes to identify recurring characters (appear in 2+ scenes).
+
+        Args:
+            scenes: List of scene dictionaries with 'illustration_prompt' keys
+            main_character: Name of the main character (already has a sheet)
+
+        Returns:
+            Dictionary with character info: {
+                'character_name': {
+                    'scenes': [1, 3, 5],  # scene numbers where character appears
+                    'description': 'physical description from scenes'
+                }
+            }
+        """
+        if not scenes:
+            return {}
+
+        try:
+            # Combine all scene prompts for analysis
+            scene_texts = []
+            for i, scene in enumerate(scenes):
+                prompt = scene.get('illustration_prompt', '')
+                text = ' '.join(scene.get('text', []))
+                scene_texts.append(f"Scene {i+1}: {prompt} | Text: {text}")
+
+            combined_scenes = '\n'.join(scene_texts)
+
+            analysis_prompt = f"""Analyze these children's book scenes and identify ALL characters (people/animals) that appear in 2 or more scenes.
+
+The MAIN character is "{main_character}" - DO NOT include them (they already have a character sheet).
+
+For each RECURRING character (appears 2+ times), provide:
+1. Character name/identifier
+2. List of scene numbers where they appear
+3. A detailed physical description compiled from all their appearances
+
+SCENES:
+{combined_scenes}
+
+Return your analysis in this EXACT format (one character per line):
+CHARACTER: [name] | SCENES: [comma-separated numbers] | DESCRIPTION: [detailed physical description]
+
+If no recurring secondary characters exist, return: NONE
+
+IMPORTANT: Only include characters that appear in AT LEAST 2 different scenes. Skip one-time appearances."""
+
+            response = self.client.responses.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": analysis_prompt}]
+            )
+
+            result_text = response.content[0].text.strip()
+
+            if "NONE" in result_text.upper():
+                logger.info("No recurring secondary characters found")
+                return {}
+
+            # Parse the response
+            characters = {}
+            for line in result_text.split('\n'):
+                if 'CHARACTER:' in line and 'SCENES:' in line and 'DESCRIPTION:' in line:
+                    try:
+                        # Parse: CHARACTER: name | SCENES: 1,3,5 | DESCRIPTION: ...
+                        parts = line.split('|')
+                        name = parts[0].replace('CHARACTER:', '').strip()
+                        scenes_str = parts[1].replace('SCENES:', '').strip()
+                        description = parts[2].replace('DESCRIPTION:', '').strip()
+
+                        # Skip if it's the main character
+                        if main_character.lower() in name.lower():
+                            continue
+
+                        scene_nums = [int(s.strip()) for s in scenes_str.split(',') if s.strip().isdigit()]
+
+                        if len(scene_nums) >= 2:  # Only if appears in 2+ scenes
+                            characters[name] = {
+                                'scenes': scene_nums,
+                                'description': description
+                            }
+                            logger.info(f"Found recurring character: {name} in scenes {scene_nums}")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse character line: {line}, error: {e}")
+                        continue
+
+            return characters
+
+        except Exception as e:
+            logger.error(f"Error extracting recurring characters: {e}")
+            return {}
+
+    def generate_all_character_sheets(
+        self,
+        main_character_desc: str,
+        main_character_name: str,
+        recurring_characters: dict,
+        output_dir: Path,
+        style: str
+    ) -> dict:
+        """
+        Generate character sheets for main character and all recurring characters.
+
+        Args:
+            main_character_desc: Description of main character
+            main_character_name: Name of main character
+            recurring_characters: Dict from extract_recurring_characters()
+            output_dir: Base output directory
+            style: Art style for illustrations
+
+        Returns:
+            Dictionary mapping character names to their sheet paths
+        """
+        char_sheets_dir = output_dir / "character_sheets"
+        char_sheets_dir.mkdir(parents=True, exist_ok=True)
+
+        sheets = {}
+
+        # Generate main character sheet
+        main_sheet_path = char_sheets_dir / f"{main_character_name}_sheet.png"
+        if main_sheet_path.exists():
+            logger.info(f"Using existing main character sheet: {main_sheet_path}")
+            sheets[main_character_name] = main_sheet_path
+            # Analyze for visual guide
+            if not self.character_visual_guide:
+                self.character_visual_guide = self._analyze_character_sheet(main_sheet_path)
+        else:
+            logger.info(f"Generating main character sheet: {main_character_name}")
+            try:
+                _, sheet_path = self.generate_character_sheet(
+                    main_character_desc,
+                    main_sheet_path,
+                    style=style
+                )
+                sheets[main_character_name] = sheet_path
+            except Exception as e:
+                logger.error(f"Failed to generate main character sheet: {e}")
+
+        # Generate sheets for recurring characters
+        for char_name, char_info in recurring_characters.items():
+            safe_name = "".join(c if c.isalnum() else "_" for c in char_name)
+            sheet_path = char_sheets_dir / f"{safe_name}_sheet.png"
+
+            if sheet_path.exists():
+                logger.info(f"Using existing character sheet for {char_name}: {sheet_path}")
+                sheets[char_name] = sheet_path
+            else:
+                logger.info(f"Generating character sheet for: {char_name} (appears in scenes {char_info['scenes']})")
+                try:
+                    # Build description for secondary character sheet
+                    char_desc = f"""Secondary character for children's book:
+Name: {char_name}
+Description: {char_info['description']}
+
+This character appears alongside the main character in multiple scenes.
+Create a character sheet showing this character in various poses and expressions,
+maintaining the same art style as the main book."""
+
+                    _, sheet_path = self.generate_character_sheet(
+                        char_desc,
+                        sheet_path,
+                        style=style
+                    )
+                    sheets[char_name] = sheet_path
+                except Exception as e:
+                    logger.error(f"Failed to generate character sheet for {char_name}: {e}")
+
+        return sheets
 
     def generate_character_sheet(
         self,
@@ -444,6 +642,7 @@ CRITICAL CONSISTENCY REQUIREMENTS:
 - All 4 panels must show the EXACT SAME character
 - Face shape must be IDENTICAL in all views (same roundness/angles)
 - Eye shape, size, and color must be IDENTICAL
+- EYES MUST have large round irises with TWO small bright white highlight dots (one larger, one smaller) - NOT solid black eyes
 - Nose shape and size must be IDENTICAL
 - Skin tone must be IDENTICAL (same exact shade)
 - Hair color, length, style, and texture must be IDENTICAL
@@ -456,6 +655,9 @@ CONSTRAINTS:
 - NO text, labels, words, or writing of any kind
 - Character is the only subject - no other characters or distracting elements
 - Consistent lighting direction across all panels"""
+
+        # Inject hard rules at the top of the prompt if they exist
+        prompt = self._add_hard_rules(prompt)
 
         logger.info(f"Generating character sheet: {character_desc[:50]}...")
 
@@ -537,7 +739,8 @@ Preserve their EXACT features in the illustrated character:
         char_sheet_path: Path,
         illustration_type: str = "spread",
         output_path: Optional[Path] = None,
-        style: Optional[str] = None
+        style: Optional[str] = None,
+        additional_references: Optional[List[Path]] = None
     ) -> Tuple[str, Path]:
         """
         Generate a single illustration with character consistency.
@@ -551,6 +754,7 @@ Preserve their EXACT features in the illustrated character:
             illustration_type: "spread", "cover", or "back_cover"
             output_path: Where to save the illustration
             style: Art style for the illustration. If None, uses instance style or default.
+            additional_references: Optional list of additional reference image paths
 
         Returns:
             Tuple of (image_data as base64, saved_path)
@@ -559,6 +763,8 @@ Preserve their EXACT features in the illustrated character:
             FileNotFoundError: If character sheet path doesn't exist
             Exception: If generation fails after retries
         """
+        if additional_references is None:
+            additional_references = []
         if not char_sheet_path.exists():
             raise FileNotFoundError(f"Character sheet not found: {char_sheet_path}")
 
@@ -615,6 +821,7 @@ SCENE/BACKGROUND: {scene_description}
 CRITICAL CONSISTENCY REQUIREMENTS - Character must match reference exactly:
 - Face shape: Preserve EXACT same shape (same roundness, same proportions)
 - Eyes: IDENTICAL shape, size, color, and style as reference
+- EYES MUST have large round irises with TWO small bright white highlight dots (one larger, one smaller) - NOT solid black eyes
 - Nose: IDENTICAL shape and size as reference
 - Skin tone: EXACT same shade as reference (do not lighten or darken)
 - Hair: IDENTICAL color, length, style, and texture as reference
@@ -626,6 +833,9 @@ CONSTRAINTS:
 - NO text, words, letters, numbers, or writing of any kind in the image
 - Character should be the clear focal point
 - Maintain consistent art style throughout"""
+
+        # Inject hard rules at the top of the prompt if they exist
+        prompt = self._add_hard_rules(prompt)
 
         logger.info(f"Generating {illustration_type}: {scene_description[:50]}...")
 
@@ -647,13 +857,34 @@ CRITICAL - Preserve these features EXACTLY from the reference:
 - Body proportions: Consistent with reference
 
 {prompt}"""
-                with open(char_sheet_path, 'rb') as char_file:
+                # Build list of image files - character sheet first, then additional refs
+                image_files = []
+                char_file = open(char_sheet_path, 'rb')
+                image_files.append(char_file)
+
+                # Add additional reference files
+                extra_files = []
+                for extra_ref in additional_references:
+                    if extra_ref.exists():
+                        f = open(extra_ref, 'rb')
+                        extra_files.append(f)
+                        image_files.append(f)
+
+                if extra_files:
+                    ref_prompt += f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the {len(extra_files)} additional reference images for style consistency."
+
+                try:
                     response = self.client.images.edit(
                         model=self.image_model,
-                        image=[char_file],  # Pass as list of file objects
+                        image=image_files,  # Pass as list of file objects
                         prompt=ref_prompt,
                         size=size
                     )
+                finally:
+                    # Close all files
+                    char_file.close()
+                    for f in extra_files:
+                        f.close()
 
                 # gpt-image-1 returns base64 data
                 if response.data[0].b64_json:
@@ -767,10 +998,12 @@ CRITICAL - Preserve these features EXACTLY from the reference:
         scene_description: str,
         illustration_type: str = "spread",
         output_dir: Optional[Path] = None,
-        style: Optional[str] = None
+        style: Optional[str] = None,
+        additional_references: Optional[List[Path]] = None,
+        skip_qa: bool = True
     ) -> Tuple[bool, str]:
         """
-        Regenerate a single image that failed QA.
+        Regenerate a single image with optional QA check.
 
         Args:
             image_name: Name of the image to regenerate
@@ -779,6 +1012,8 @@ CRITICAL - Preserve these features EXACTLY from the reference:
             illustration_type: Type of illustration
             output_dir: Directory to save output
             style: Art style for the illustration. If None, uses instance style or default.
+            additional_references: Optional list of additional reference image paths
+            skip_qa: If True, skip QA check (for user-directed regeneration)
 
         Returns:
             Tuple of (success boolean, path_or_error_message)
@@ -786,9 +1021,18 @@ CRITICAL - Preserve these features EXACTLY from the reference:
         if output_dir is None:
             output_dir = Path.home() / "books_output"
 
-        output_path = output_dir / "spreads" / image_name
+        # Determine output path based on illustration type
+        if illustration_type == "spread":
+            output_path = output_dir / "art" / image_name
+        elif illustration_type == "cover":
+            output_path = output_dir / "art" / "cover.png"
+        else:
+            output_path = output_dir / "art" / image_name
 
-        logger.info(f"Regenerating image: {image_name}")
+        if additional_references is None:
+            additional_references = []
+
+        logger.info(f"Regenerating image: {image_name} with {len(additional_references)} additional references")
 
         try:
             _, saved_path = self.generate_illustration(
@@ -796,16 +1040,24 @@ CRITICAL - Preserve these features EXACTLY from the reference:
                 char_sheet_path,
                 illustration_type,
                 output_path,
-                style=style
+                style=style,
+                additional_references=additional_references
             )
 
+            # For user-directed regeneration, skip QA - trust their judgment
+            if skip_qa:
+                logger.info(f"Image regenerated successfully (QA skipped): {image_name}")
+                return True, str(saved_path)
+
+            # Run QA if requested
             passed, qa_result = self.qa_check(saved_path, scene_description)
             if passed:
-                logger.info(f"Image regenerated successfully: {image_name}")
+                logger.info(f"Image regenerated and passed QA: {image_name}")
                 return True, str(saved_path)
             else:
-                logger.warning(f"Regenerated image still failing QA: {image_name}")
-                return False, "Image regenerated but still failed QA"
+                # For user-directed regeneration, still return success even if QA fails
+                logger.warning(f"Regenerated image has QA warnings (returning success anyway): {image_name}")
+                return True, str(saved_path)
 
         except Exception as e:
             logger.error(f"Error fixing image {image_name}: {e}")

@@ -30,59 +30,115 @@ logger = logging.getLogger(__name__)
 AGE_SPECS = {
     "kid": {
         "line_weight": "4-6pt thick bold lines",
-        "planes": "3-8 planes per object",
-        "areas": "Extra large coloring areas",
-        "content": "Simple animals, basic objects, cartoon characters"
+        "section_count": "5-10 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 1.5 inches across",
+        "line_spacing": "Lines must be at least 0.5 inch apart",
+        "content": "Simple animals, basic objects, cartoon characters",
+        "avoid": "NO intricate patterns, NO textures, NO overlapping elements, NO small details"
     },
     "tween": {
         "line_weight": "2-4pt medium lines",
-        "planes": "10-20 planes per object",
-        "areas": "Medium sized coloring areas",
-        "content": "Characters, simple scenes, beginner patterns"
+        "section_count": "15-25 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 0.75 inch across",
+        "line_spacing": "Lines must be at least 0.25 inch apart",
+        "content": "Characters, simple scenes, beginner patterns",
+        "avoid": "NO dense patterns, NO very small sections, NO overlapping complex shapes"
     },
     "teen": {
         "line_weight": "1-2pt finer lines",
-        "planes": "20-40 planes per object",
-        "areas": "Varied size coloring areas",
-        "content": "Fantasy, anime-style, detailed characters"
+        "section_count": "30-50 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 0.5 inch across",
+        "line_spacing": "Lines must be at least 0.15 inch apart",
+        "content": "Fantasy, anime-style, detailed characters",
+        "avoid": "NO micro-detail patterns, NO sections smaller than a pencil eraser"
     },
     "ya": {
         "line_weight": "0.5-1.5pt fine detailed lines",
-        "planes": "30-50 planes per object",
-        "areas": "Mix of large and detailed small areas",
-        "content": "Artistic, trendy themes, sophisticated designs"
+        "section_count": "50-80 total sections on the entire page",
+        "min_area_size": "Most areas at least 0.25 inch across",
+        "line_spacing": "Lines must be at least 0.1 inch apart",
+        "content": "Artistic, trendy themes, sophisticated designs",
+        "avoid": "NO eye-straining micro-details"
     },
     "adult": {
         "line_weight": "0.25-1pt very fine intricate lines",
-        "planes": "40-80+ planes per object",
-        "areas": "Many small detailed sections",
-        "content": "Mandalas, botanicals, architecture, complex patterns"
+        "section_count": "80-150+ total sections on the entire page",
+        "min_area_size": "Areas can be as small as 0.1 inch",
+        "line_spacing": "Lines can be 0.05 inch apart or closer",
+        "content": "Mandalas, botanicals, architecture, complex patterns",
+        "avoid": "Generally no restrictions - intricate detail is expected"
     },
     "elder": {
         "line_weight": "1.5-3pt medium-bold clear lines",
-        "planes": "15-30 planes per object",
-        "areas": "Larger, well-defined areas",
-        "content": "Nostalgic themes, nature, relaxing scenes"
+        "section_count": "15-30 total sections on the entire page",
+        "min_area_size": "Each coloring area at least 0.75 inch across",
+        "line_spacing": "Lines must be at least 0.3 inch apart",
+        "content": "Nostalgic themes, nature, relaxing scenes",
+        "avoid": "NO fine details, NO dense patterns, NO small sections, NO eye strain"
     }
 }
 
-# Difficulty modifiers with plane multiplier
+# Difficulty modifiers - EXPLICIT rules for what makes coloring easier/harder
 DIFFICULTY_MODS = {
     "easy": {
-        "plane_mod": 0.5,
-        "description": "Reduce complexity by 50%, widen coloring areas, thicken lines"
+        "multiplier": 0.5,
+        "line_thickness": "INCREASE line thickness by 50%",
+        "section_reduction": "REDUCE total sections by 50% from age level baseline",
+        "min_spacing": "DOUBLE the minimum line spacing",
+        "area_increase": "INCREASE minimum coloring area size by 50%",
+        "explicit_rules": [
+            "MAXIMUM 10-15 distinct coloring sections for the ENTIRE page",
+            "Every coloring area must be LARGE - at least 1 inch across",
+            "Lines must be THICK and BOLD - easy to see and stay within",
+            "NO intricate patterns or textures inside shapes",
+            "NO overlapping or layered elements",
+            "Simple, clean outlines only",
+            "Leave GENEROUS white space between elements",
+            "A young child should be able to color this without frustration"
+        ]
     },
     "medium": {
-        "plane_mod": 1.0,
-        "description": "Standard specifications for age level"
+        "multiplier": 1.0,
+        "line_thickness": "Standard for age level",
+        "section_reduction": "Standard section count for age level",
+        "min_spacing": "Standard spacing for age level",
+        "area_increase": "Standard area sizes for age level",
+        "explicit_rules": [
+            "Balanced complexity appropriate for age level",
+            "Mix of larger and medium-sized coloring areas",
+            "Some decorative detail but not overwhelming",
+            "Clear distinction between different elements",
+            "Comfortable coloring experience - not too easy, not frustrating"
+        ]
     },
     "hard": {
-        "plane_mod": 1.5,
-        "description": "Increase complexity by 50%, add fine details, thinner lines"
+        "multiplier": 1.5,
+        "line_thickness": "DECREASE line thickness by 25%",
+        "section_reduction": "INCREASE sections by 50% from age level baseline",
+        "min_spacing": "REDUCE minimum spacing by 25%",
+        "area_increase": "REDUCE minimum area size by 25%",
+        "explicit_rules": [
+            "More detailed and intricate than standard",
+            "Include decorative patterns within shapes",
+            "Finer line work with more sections",
+            "Some challenging small areas mixed with medium ones",
+            "Requires patience and precision"
+        ]
     },
     "expert": {
-        "plane_mod": 2.0,
-        "description": "Double complexity, maximum intricacy, finest appropriate lines"
+        "multiplier": 2.0,
+        "line_thickness": "DECREASE line thickness by 50%",
+        "section_reduction": "DOUBLE the sections from age level baseline",
+        "min_spacing": "REDUCE minimum spacing by 50%",
+        "area_increase": "REDUCE minimum area size by 50%",
+        "explicit_rules": [
+            "Maximum intricacy and detail",
+            "Dense patterns and textures throughout",
+            "Many small, precise coloring sections",
+            "Fine line work requiring steady hand",
+            "Challenging even for experienced colorists",
+            "May take several hours to complete"
+        ]
     }
 }
 
@@ -190,26 +246,45 @@ class ColoringPageGenerator:
                 return guidelines
         return THEME_GUIDELINES["custom"]
 
-    def _calculate_complexity(self, age_level: str, difficulty: str) -> str:
-        """Calculate adjusted complexity based on age and difficulty."""
+    def _build_difficulty_prompt(self, age_level: str, difficulty: str) -> str:
+        """Build explicit difficulty instructions for the prompt."""
         age_specs = self._get_age_specs(age_level)
         difficulty_mod = self._get_difficulty_mod(difficulty)
-        planes = age_specs['planes']
-        # Extract base number for calculation note
-        mod = difficulty_mod['plane_mod']
-        if mod == 0.5:
-            return f"{planes} reduced by 50% (simpler, larger areas)"
-        elif mod == 1.5:
-            return f"{planes} increased by 50% (more detailed)"
-        elif mod == 2.0:
-            return f"{planes} doubled (maximum intricacy)"
-        return planes
+
+        lines = []
+        lines.append(f"=== DIFFICULTY LEVEL: {difficulty.upper()} ===")
+        lines.append("")
+
+        # Age level baseline
+        lines.append(f"BASE SPECIFICATIONS (for {age_level}):")
+        lines.append(f"- Target section count: {age_specs['section_count']}")
+        lines.append(f"- Minimum coloring area size: {age_specs['min_area_size']}")
+        lines.append(f"- Line spacing requirement: {age_specs['line_spacing']}")
+        lines.append(f"- Line weight: {age_specs['line_weight']}")
+        lines.append(f"- AVOID: {age_specs['avoid']}")
+        lines.append("")
+
+        # Difficulty adjustments
+        lines.append(f"DIFFICULTY ADJUSTMENTS ({difficulty}):")
+        lines.append(f"- {difficulty_mod['line_thickness']}")
+        lines.append(f"- {difficulty_mod['section_reduction']}")
+        lines.append(f"- {difficulty_mod['min_spacing']}")
+        lines.append(f"- {difficulty_mod['area_increase']}")
+        lines.append("")
+
+        # Explicit rules
+        lines.append("EXPLICIT RULES - MUST FOLLOW:")
+        for rule in difficulty_mod['explicit_rules']:
+            lines.append(f"• {rule}")
+
+        return "\n".join(lines)
 
     def generate_page(
         self,
         config: PageConfig,
         reference_sheet: Path,
-        output_path: Optional[Path] = None
+        output_path: Optional[Path] = None,
+        additional_references: Optional[List[Path]] = None
     ) -> Tuple[bool, Path]:
         """
         Generate a single coloring page using the reference sheet as style guide.
@@ -218,12 +293,16 @@ class ColoringPageGenerator:
             config: PageConfig with page details
             reference_sheet: Path to the reference/style sheet image
             output_path: Where to save the generated page
+            additional_references: Optional list of additional reference image paths
 
         Returns:
             Tuple of (success, output_path)
         """
         if not reference_sheet.exists():
             raise FileNotFoundError(f"Reference sheet not found: {reference_sheet}")
+
+        if additional_references is None:
+            additional_references = []
 
         if output_path is None:
             output_path = Path(f"page_{config.page_num:02d}.png")
@@ -232,7 +311,7 @@ class ColoringPageGenerator:
         age_specs = self._get_age_specs(config.age_level)
         difficulty_mod = self._get_difficulty_mod(config.difficulty)
         theme_guidelines = self._get_theme_guidelines(config.theme)
-        calculated_complexity = self._calculate_complexity(config.age_level, config.difficulty)
+        difficulty_prompt = self._build_difficulty_prompt(config.age_level, config.difficulty)
         art_style = ART_STYLES.get(config.style, ART_STYLES["bold-easy"])
 
         # Build the prompt with safe zone framing FIRST
@@ -272,10 +351,7 @@ Your subject "{config.concept}" must look COMPLETELY DIFFERENT from above.
 - Page {config.page_num} in a coloring book
 - Create a fresh, distinct composition unlike any previous page
 
-LINE STYLE (match reference sheet):
-- Line Weight: {age_specs['line_weight']}
-- Complexity: {calculated_complexity}
-- Content: {age_specs['content']}
+{difficulty_prompt}
 
 {f"NOTES: {config.notes}" if config.notes else ""}
 
@@ -294,21 +370,48 @@ Before outputting, verify:
 □ NO part of the subject touches ANY edge
 □ Clear white margin visible on all 4 sides
 □ If ANY part would be cut off, you made it SMALLER
+□ SECTION COUNT matches difficulty level requirements
+□ COLORING AREAS are appropriately sized for difficulty
 
-OUTPUT: Single coloring page with "{config.concept}" fully contained, clear margins on ALL sides."""
+OUTPUT: Single coloring page with "{config.concept}" fully contained, clear margins on ALL sides, complexity matching {config.difficulty} difficulty."""
 
-        logger.info(f"Generating page {config.page_num}: {config.concept[:50]}...")
+        # Log additional references if any
+        if additional_references:
+            logger.info(f"Generating page {config.page_num} with {len(additional_references)} additional reference(s): {config.concept[:50]}...")
+            # Add note about additional references to prompt
+            ref_note = f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the additional reference images to match style, line weight, and composition approach."
+            prompt = prompt.replace("OUTPUT:", f"{ref_note}\n\nOUTPUT:")
+        else:
+            logger.info(f"Generating page {config.page_num}: {config.concept[:50]}...")
 
-        # Generate with reference sheet
+        # Generate with reference sheet(s)
         for attempt in range(self.max_retries):
             try:
-                with open(reference_sheet, 'rb') as ref_file:
+                # Build list of image files - primary reference first, then additional refs
+                image_files = []
+                ref_file = open(reference_sheet, 'rb')
+                image_files.append(ref_file)
+
+                # Add additional reference files
+                extra_files = []
+                for extra_ref in additional_references:
+                    if extra_ref.exists():
+                        f = open(extra_ref, 'rb')
+                        extra_files.append(f)
+                        image_files.append(f)
+
+                try:
                     response = self.client.images.edit(
                         model=self.image_model,
-                        image=[ref_file],
+                        image=image_files,
                         prompt=prompt,
                         size="1024x1024"  # Square for coloring pages
                     )
+                finally:
+                    # Close all files
+                    ref_file.close()
+                    for f in extra_files:
+                        f.close()
 
                 # Save the result
                 if response.data[0].b64_json:
