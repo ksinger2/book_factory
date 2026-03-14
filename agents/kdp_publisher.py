@@ -132,37 +132,92 @@ class KDPPublisher:
         logger.warning("No Chrome profile found")
         return None
 
+    def _copy_chrome_profile_to_temp(self, chrome_data_dir: str) -> Optional[str]:
+        """Copy Chrome profile to a temp directory for Playwright use.
+
+        Chrome doesn't allow DevTools on its default data directory,
+        so we copy the profile to a temp location.
+        """
+        import shutil
+        import tempfile
+
+        source_profile = Path(chrome_data_dir) / self.chrome_profile_name
+        if not source_profile.exists():
+            logger.warning(f"Profile {self.chrome_profile_name} not found in {chrome_data_dir}")
+            return None
+
+        # Create temp directory for our copy
+        temp_base = Path(tempfile.gettempdir()) / "kdp_publisher_profile"
+        temp_base.mkdir(exist_ok=True)
+
+        # Use a consistent temp profile directory
+        temp_profile_dir = temp_base / "ChromeProfile"
+        temp_profile_subdir = temp_profile_dir / "Default"  # Playwright expects "Default"
+
+        # Copy essential profile files (cookies, local storage, login data)
+        essential_items = [
+            "Cookies",
+            "Local Storage",
+            "Session Storage",
+            "Login Data",
+            "Preferences",
+            "Secure Preferences",
+            "Web Data",
+        ]
+
+        try:
+            # Clean up old temp profile
+            if temp_profile_dir.exists():
+                shutil.rmtree(temp_profile_dir)
+
+            temp_profile_dir.mkdir(parents=True)
+            temp_profile_subdir.mkdir()
+
+            # Copy essential files/folders
+            for item in essential_items:
+                src = source_profile / item
+                dst = temp_profile_subdir / item
+                if src.exists():
+                    if src.is_dir():
+                        shutil.copytree(src, dst)
+                    else:
+                        shutil.copy2(src, dst)
+                    logger.debug(f"Copied {item}")
+
+            # Also copy Local State from parent
+            local_state = Path(chrome_data_dir) / "Local State"
+            if local_state.exists():
+                shutil.copy2(local_state, temp_profile_dir / "Local State")
+
+            logger.info(f"Chrome profile copied to temp: {temp_profile_dir}")
+            return str(temp_profile_dir)
+
+        except Exception as e:
+            logger.error(f"Failed to copy Chrome profile: {e}")
+            return None
+
     def start(self):
         """Start Playwright and browser.
 
-        If use_chrome_profile=True, launches Chromium using the user's existing
-        Chrome profile so their KDP login session is already active.
-        NOTE: Chrome must be fully closed before launching (can't share profile).
+        Connects to existing Chrome via remote debugging if available (port 9222),
+        otherwise falls back to fresh Playwright browser.
         """
         logger.info("Starting Playwright browser...")
         self.playwright = sync_playwright().start()
 
-        if self.use_chrome_profile:
-            chrome_profile = self._find_chrome_profile()
-            if chrome_profile:
-                logger.info(f"Launching with Chrome profile: {chrome_profile} (profile: {self.chrome_profile_name})")
-                logger.info("NOTE: Close all Chrome windows first — Playwright needs exclusive access to the profile.")
-                self.context = self.playwright.chromium.launch_persistent_context(
-                    user_data_dir=chrome_profile,
-                    channel="chrome",  # Use installed Chrome, not bundled Chromium
-                    headless=False,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        f"--profile-directory={self.chrome_profile_name}",
-                    ],
-                )
-                self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
-                logger.info("Browser started with existing Chrome profile (KDP login should be active)")
-                return
-            else:
-                logger.warning("Chrome profile not found — falling back to fresh browser")
+        # Try to connect to existing Chrome with remote debugging
+        try:
+            logger.info("Attempting to connect to Chrome on port 9222...")
+            self.browser = self.playwright.chromium.connect_over_cdp("http://localhost:9222")
+            self.context = self.browser.contexts[0] if self.browser.contexts else self.browser.new_context()
+            self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
+            logger.info("Connected to existing Chrome browser via remote debugging!")
+            return
+        except Exception as e:
+            logger.warning(f"Could not connect to Chrome remote debugging: {e}")
 
         # Fallback: fresh Playwright browser with optional session file
+        logger.info("Launching fresh Playwright browser...")
         self.browser = self.playwright.chromium.launch(headless=self.headless)
         context_args = {
             'storage_state': str(self.session_file) if self.session_file.exists() else None
@@ -269,6 +324,64 @@ class KDPPublisher:
             logger.error(f"Login failed: {str(e)}")
             return False
 
+    def _ensure_logged_in(self, max_wait_seconds: int = 180) -> bool:
+        """
+        Check if logged into KDP. If not, wait for manual login.
+        Returns True if logged in, False if timeout reached.
+        """
+        self._log_action("CHECK_LOGIN", "Verifying KDP login status...")
+
+        # Navigate to bookshelf to check login
+        self.page.goto(self.KDP_BOOKSHELF, wait_until='networkidle')
+        self._wait_for_navigation()
+
+        # Check for signout button (indicates logged in)
+        try:
+            self.page.wait_for_selector('[data-feature-id="signout-button"], button:has-text("Sign out"), [aria-label*="sign out"]', timeout=5000)
+            logger.info("Already logged into KDP")
+            return True
+        except:
+            pass
+
+        # Check if we're on login page
+        current_url = self.page.url
+        if 'signin' in current_url or 'ap/signin' in current_url:
+            logger.info("Not logged in - waiting for manual login...")
+            logger.info(f"Please log into KDP in the browser window. Waiting up to {max_wait_seconds} seconds...")
+            print(f"\n{'='*60}")
+            print("KDP LOGIN REQUIRED")
+            print(f"{'='*60}")
+            print("A browser window has opened. Please log into your KDP account.")
+            print(f"Waiting up to {max_wait_seconds} seconds for login...")
+            print(f"{'='*60}\n")
+
+            # Wait for login (check for signout button periodically)
+            import time
+            start_time = time.time()
+            while time.time() - start_time < max_wait_seconds:
+                try:
+                    self.page.wait_for_selector('[data-feature-id="signout-button"], button:has-text("Sign out"), [aria-label*="sign out"]', timeout=5000)
+                    logger.info("Login detected! Continuing with publishing...")
+                    self._save_session()  # Save session for future use
+                    return True
+                except:
+                    pass
+                time.sleep(2)
+
+            logger.error(f"Login timeout after {max_wait_seconds} seconds")
+            return False
+
+        # Might be on bookshelf already, try to find create button
+        try:
+            self.page.wait_for_selector('button:has-text("Create"), button[data-test-id="create-new-title"]', timeout=5000)
+            logger.info("On KDP bookshelf - logged in")
+            return True
+        except:
+            pass
+
+        logger.error("Could not verify KDP login status")
+        return False
+
     def create_paperback(
         self,
         listing: BookListing,
@@ -284,6 +397,11 @@ class KDPPublisher:
         self._log_action("CREATE_PAPERBACK", f"title={listing.title}, price=${price}")
 
         try:
+            # Ensure we're logged in first
+            if not self._ensure_logged_in():
+                logger.error("Not logged into KDP - cannot create paperback")
+                return False
+
             # Navigate to bookshelf
             self.page.goto(self.KDP_BOOKSHELF, wait_until='networkidle')
             self._wait_for_navigation()
@@ -374,6 +492,11 @@ class KDPPublisher:
         self._log_action("CREATE_EBOOK", f"title={listing.title}, price=${price}")
 
         try:
+            # Ensure we're logged in first
+            if not self._ensure_logged_in():
+                logger.error("Not logged into KDP - cannot create ebook")
+                return False
+
             # Navigate to bookshelf
             self.page.goto(self.KDP_BOOKSHELF, wait_until='networkidle')
             self._wait_for_navigation()
@@ -585,44 +708,176 @@ class KDPPublisher:
             logger.error(f"Failed to fill Details tab: {str(e)}")
 
     def _fill_content_tab_paperback(self, interior_pdf: str, cover_pdf: str):
-        """Fill Content tab for paperback"""
+        """Fill Content tab for paperback
+
+        KDP Content tab flow (in order):
+        1. ISBN assignment (free KDP ISBN)
+        2. Print options (ink/paper, trim size, bleed, cover finish)
+        3. Manuscript upload
+        4. Cover upload
+        """
         try:
-            # Upload interior PDF
+            # === SECTION 1: ISBN Assignment ===
+            self._log_action("SELECTING", "Free KDP ISBN")
+            # Select "Get a free KDP ISBN" radio button
+            free_isbn_radio = self.page.locator(
+                'input[type="radio"][value*="free"], '
+                'label:has-text("Get a free KDP ISBN") input[type="radio"], '
+                'div:has-text("Get a free KDP ISBN") input[type="radio"]'
+            )
+            if free_isbn_radio.count() > 0:
+                free_isbn_radio.first.click()
+                time.sleep(self.WAIT_SHORT)
+
+            # Click "Assign ISBN" button
+            self._log_action("CLICKING", "Assign ISBN button")
+            assign_isbn_btn = self.page.locator(
+                'button:has-text("Assign ISBN"), '
+                'button:has-text("Assign an ISBN"), '
+                'input[type="button"][value*="Assign"]'
+            )
+            if assign_isbn_btn.count() > 0:
+                assign_isbn_btn.first.click()
+                time.sleep(self.WAIT_MEDIUM)
+
+            # === SECTION 2: Print Options ===
+            # Expand print options section if collapsed
+            print_options_header = self.page.locator(
+                'button:has-text("Print options"), '
+                'div[role="button"]:has-text("Print options"), '
+                'h2:has-text("Print options")'
+            )
+            if print_options_header.count() > 0:
+                # Check if section needs expanding (look for collapsed state)
+                parent = print_options_header.first
+                if parent.get_attribute('aria-expanded') == 'false':
+                    parent.click()
+                    time.sleep(self.WAIT_SHORT)
+
+            # Ink and Paper Type - Select Premium Color
+            self._log_action("SELECTING", "Ink and paper: Premium Color")
+            premium_color = self.page.locator(
+                'label:has-text("Premium color"), '
+                'input[type="radio"][value*="premium"], '
+                'div:has-text("Premium color") input[type="radio"]'
+            )
+            if premium_color.count() > 0:
+                premium_color.first.click()
+                time.sleep(self.WAIT_SHORT)
+
+            # Trim Size - Select 8.5 x 8.5 in
+            self._log_action("SELECTING", "Trim size: 8.5 x 8.5 in")
+            # First try clicking the trim size dropdown/select
+            trim_dropdown = self.page.locator(
+                'select[name*="trim"], '
+                '[aria-label*="Trim size"], '
+                'div:has-text("Trim size") select'
+            )
+            if trim_dropdown.count() > 0:
+                trim_dropdown.first.select_option(label="8.5 x 8.5 in")
+            else:
+                # Fallback: look for radio/button options
+                trim_option = self.page.locator(
+                    'label:has-text("8.5 x 8.5"), '
+                    'option:has-text("8.5 x 8.5")'
+                )
+                if trim_option.count() > 0:
+                    trim_option.first.click()
+            time.sleep(self.WAIT_SHORT)
+
+            # Bleed Settings - Select No Bleed (our PDFs don't have bleed margins)
+            self._log_action("SELECTING", "Bleed: No bleed")
+            no_bleed = self.page.locator(
+                'label:has-text("No bleed"), '
+                'input[type="radio"][value*="no-bleed"], '
+                'input[type="radio"][value*="none"]'
+            )
+            if no_bleed.count() > 0:
+                no_bleed.first.click()
+                time.sleep(self.WAIT_SHORT)
+
+            # Cover Finish - Select Glossy
+            self._log_action("SELECTING", "Cover finish: Glossy")
+            glossy_option = self.page.locator(
+                'label:has-text("Glossy"), '
+                'input[type="radio"][value*="glossy"], '
+                'div:has-text("Glossy") input[type="radio"]'
+            )
+            if glossy_option.count() > 0:
+                glossy_option.first.click()
+                time.sleep(self.WAIT_SHORT)
+
+            # Page Reading Direction - Left to Right (default for English)
+            self._log_action("SELECTING", "Reading direction: Left to Right")
+            ltr_option = self.page.locator(
+                'label:has-text("Left to Right"), '
+                'input[type="radio"][value*="ltr"], '
+                'input[type="radio"][value*="left"]'
+            )
+            if ltr_option.count() > 0:
+                ltr_option.first.click()
+                time.sleep(self.WAIT_SHORT)
+
+            # === SECTION 3: Manuscript Upload ===
             self._log_action("UPLOADING", f"interior PDF: {interior_pdf}")
-            interior_input = self.page.locator('input[type="file"][name*="interior"], input[type="file"][accept*="pdf"]')
+            # Look for manuscript/interior upload input
+            interior_input = self.page.locator(
+                'input[type="file"][name*="interior"], '
+                'input[type="file"][name*="manuscript"], '
+                'input[type="file"][accept*="pdf"]'
+            )
             if interior_input.count() > 0:
                 interior_input.first.set_input_files(interior_pdf)
+                # Wait for upload and processing
                 time.sleep(self.WAIT_FILE_UPLOAD)
+                # Wait for processing indicator to disappear
+                self._wait_for_upload_complete()
 
-            # Upload cover PDF
+            # === SECTION 4: Cover Upload ===
             self._log_action("UPLOADING", f"cover PDF: {cover_pdf}")
-            cover_input = self.page.locator('input[type="file"][name*="cover"], input[type="file"][accept*="pdf"]')
+            # Cover upload is typically the second file input or specifically labeled
+            cover_input = self.page.locator(
+                'input[type="file"][name*="cover"]'
+            )
             if cover_input.count() > 0:
-                # Try second file input if there are multiple
-                if cover_input.count() > 1:
-                    cover_input.nth(1).set_input_files(cover_pdf)
-                else:
-                    cover_input.first.set_input_files(cover_pdf)
-                time.sleep(self.WAIT_FILE_UPLOAD)
+                cover_input.first.set_input_files(cover_pdf)
+            else:
+                # Fallback: find all PDF inputs and use the second one
+                all_pdf_inputs = self.page.locator('input[type="file"][accept*="pdf"]')
+                if all_pdf_inputs.count() > 1:
+                    all_pdf_inputs.nth(1).set_input_files(cover_pdf)
+                elif all_pdf_inputs.count() > 0:
+                    all_pdf_inputs.first.set_input_files(cover_pdf)
 
-            # Select trim size (8.5x8.5)
-            self._log_action("SELECTING", "Trim size: 8.5 x 8.5")
-            self._select_dropdown('trim size', '8.5 x 8.5')
-
-            # Select bleed (0.125")
-            self._log_action("SELECTING", "Bleed: 0.125 inches")
-            bleed_option = self.page.locator('label:has-text("With bleed")')
-            if bleed_option.count() > 0:
-                bleed_option.first.click()
-
-            # Select paper type (white, matte, or premium)
-            self._log_action("SELECTING", "Paper type: Premium color")
-            self._select_dropdown('paper type', 'Premium')
+            # Wait for cover upload and processing
+            time.sleep(self.WAIT_FILE_UPLOAD)
+            self._wait_for_upload_complete()
 
             logger.info("Content tab (paperback) filled successfully")
 
         except Exception as e:
             logger.error(f"Failed to fill Content tab (paperback): {str(e)}")
+
+    def _wait_for_upload_complete(self, timeout: int = 60):
+        """Wait for file upload processing to complete"""
+        try:
+            # Wait for any processing spinner/indicator to disappear
+            processing_indicators = [
+                '[class*="spinner"]',
+                '[class*="loading"]',
+                '[class*="progress"]',
+                'div:has-text("Processing")',
+                'div:has-text("Uploading")'
+            ]
+            for indicator in processing_indicators:
+                try:
+                    locator = self.page.locator(indicator)
+                    if locator.count() > 0:
+                        locator.first.wait_for(state='hidden', timeout=timeout * 1000)
+                except:
+                    pass
+        except Exception as e:
+            logger.debug(f"Upload wait check: {str(e)}")
 
     def _fill_content_tab_ebook(self, interior_pdf: str, cover_jpg: str):
         """Fill Content tab for eBook"""

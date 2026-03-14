@@ -1,406 +1,255 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-13 01:25
-> **Session ID:** session-20260313a
+> **Last Updated:** 2026-03-13 19:45 (reinit)
+> **Session ID:** session-20260313c
 
 ---
 
-## Latest Changes (This Session)
+## Session Reinitialization Summary (2026-03-13 19:45)
 
-### Draft Mode Toggle (2026-03-13) - COST SAVINGS
-Added UI toggle for draft mode to dramatically reduce testing costs:
+All 5 domain agents synchronized. Key findings:
 
-#### Features
-- **Toggle switch** on coloring book brief page (Cost Mode card)
-- **Draft mode:** Uses dall-e-2 (~$0.02/image) - ~$0.50/book
-- **Production mode:** Uses gpt-image-1 (~$0.05/image) - ~$2.50/book
+| Agent | Status | Recent Activity | Critical Issues |
+|-------|--------|-----------------|-----------------|
+| Niche Researcher | READY | 11 niches ranked | Competition formula broken (all 0) |
+| Story Engine | PRODUCTION-READY | 25+ books generated | Word count slightly tight (289 vs 300) |
+| Art Pipeline | READY | 15 books with art | 3 recent books missing spreads in art_result.json |
+| PDF Builder | READY | 9 complete PDFs | 2 books have 15KB interior PDFs (too small) |
+| KDP Publisher | UNTESTED | 0 publish attempts | Never run end-to-end |
 
-#### Files Modified
-- `agents/coloring_style_generator.py` - Added `draft_mode` parameter, uses dall-e-2 in draft mode
-- `agents/coloring_page_generator.py` - Added `draft_mode` parameter, uses dall-e-2 with standard quality
-- `agents/coloring_cover_generator.py` - Added `draft_mode` parameter
-- `run.py` - All coloring endpoints now accept and pass `draft_mode`
-- `dashboard.html` - Toggle UI, CSS for switch, passes `draft_mode` to all coloring API calls
-
-#### API Endpoints Updated
-- `/api/coloring/reference` - accepts draft_mode
-- `/api/coloring/pages` - accepts draft_mode
-- `/api/coloring/regenerate` - accepts draft_mode
-- `/api/coloring/cover` - accepts draft_mode
-
----
-
-### Previous: Cost Optimization (2026-03-12 Evening) - MAJOR
-Reduced image generation costs by 75-85% (~$20/day → $3-5/day):
-
-#### Retry Bug Fixes
-- **Fixed off-by-one bug** in `art_pipeline.py` lines 464, 631, 945 - was running 4 retries instead of 3
-- Changed `while attempt <= max_retries` → `while attempt < max_retries`
-
-#### Fail-Fast Logic
-- Added `CriticalImageFailure` exception class
-- If character sheet fails after 3 retries, pipeline aborts immediately (saves money on subsequent images)
-
-#### Quality & Model Changes
-- Image quality: `high` → `medium` (50% cost reduction)
-- Vision model: `gpt-4o` → `gpt-4o-mini` for QA checks (30x cheaper)
-- Story model: Reverted to `gpt-4o` (gpt-4o-mini too restrictive for diverse content)
-- Added `qa_first_only=True` flag - only QA character sheet, skip cover/spreads/back_cover
-
-#### Files Modified
-- `agents/art_pipeline.py` - Retry fixes, CriticalImageFailure, qa_first_only, vision model
-- `agents/coloring_page_generator.py` - Quality setting
-- `agents/coloring_style_generator.py` - Quality setting
-- `agents/coloring_cover_generator.py` - Quality setting
-- `agents/coloring_qa_checker.py` - Default model to gpt-4o-mini
-- `agents/story_engine.py` - Model selection, diversity theme support
-- `config/studio_config.yaml` - Quality: medium
-
-### Diversity Content Support (2026-03-12 Evening)
-- Added explicit support for LGBTQ+, cultural, and social themes in story prompts
-- References published examples (And Tango Makes Three, Heather Has Two Mommies)
-- Prevents overly cautious content filter rejections for legitimate children's book topics
-
-### External Testing Setup (2026-03-12 Evening)
-- Installed `cloudflared` for Cloudflare Tunnel
-- Created tunnel: `bookfactory` → `bookfactory.backtoirl.com`
-- Config at `~/.cloudflared/config.yml`
-- **To start tunnel:** `cloudflared tunnel run bookfactory`
-- **Access protection:** Set up via Cloudflare Access dashboard (one.dash.cloudflare.com)
-
-### OpenAI Image Generation Skill (2026-03-12 Evening)
-Created `~/.claude/skills/openai-image-generation/` with:
-- Cost optimization guidelines (70-90% savings possible)
-- Prompt templates for game assets and illustrations
-- Sprite sheet generation patterns
-- Book Factory specific patterns in `references/book-factory-patterns.md`
-
-### Previous: Environment Setup (2026-03-12 PM)
-- Created Python virtual environment (`venv/`) for dependency isolation
-- Installed all requirements via `pip install -r requirements.txt`
-- Flask dashboard server verified running on **http://localhost:5555**
-
-### Test Run: Baroque Blooms Coloring Book (2026-03-12)
-- Successfully generated a 12-page coloring book with reference sheet
-- Output in `output/Baroque_Blooms-20260312_082203/`
-- All pipeline fixes (theme, uniqueness, edge cutoff) applied in this run
-
-### Coloring Book Pipeline Fixes (2026-03-12)
-Critical fixes for theme handling, page uniqueness, and edge cutoff issues:
-
-#### Fix 1: Theme Flow (CRITICAL)
-**Problem:** User selected "insects" but got dragons/unicorns - custom theme saved as empty string
-**Solution:**
-- Added `oninput` handler to custom theme input to preserve value during re-renders
-- `updateColoringTheme()` now preserves custom value before re-render
-- Added validation in `saveColoringBrief()` - alerts if theme empty
-- Server-side validation in `/api/coloring/brief` returns 400 if theme missing
-- Added fallback: `theme = brief_data.get('theme', '').strip() or 'General'`
-- Added new THEME_GUIDELINES: `insects`, `bugs`, `birds`
-
-#### Fix 2: Page Uniqueness (HIGH)
-**Problem:** Same creature in same pose on multiple pages - no cross-page context
-**Solution:**
-- Enhanced `_generate_concepts_with_llm()` with exclusion_list parameter
-- Added `_extract_subject()` helper to identify primary subject
-- Added `_validate_unique_subjects()` to verify 80%+ uniqueness
-- Added `previous_subjects: List[str]` field to `PageConfig` dataclass
-- Updated page prompt with `*** UNIQUENESS - DO NOT REPEAT ***` section
-- `run.py` now tracks `generated_subjects` list during generation loop
-- Each page receives all previously generated subjects to avoid repetition
-
-#### Fix 3: Edge Cutoff Prevention (HIGH)
-**Problem:** Creatures cropped at page edges but QA passes - prompts too weak, scoring too lenient
-**Solution:**
-- Restructured page prompt with `*** CRITICAL - SAFE ZONE FRAMING - READ FIRST ***`
-- 10% margin rule: NOTHING enters outer 10% zone
-- Added explicit failure examples (dragon tail, unicorn horn, butterfly antenna)
-- Composition check with ✓ checkboxes before drawing
-- Subject size constraint: 50-70% of safe zone
-- QA scorer: `NO_EDGE_CUTOFF` now BINARY PASS/FAIL (0-20 for any cut, 80-100 for pass)
-- Stricter validation: edge cutoff requires score ≥50 (was 70)
-
-### Files Modified
-- `dashboard.html` - oninput handler, theme preservation, validation
-- `run.py` - Theme validation, subject tracking in generation loop
-- `agents/coloring_style_generator.py` - Theme guidelines, LLM concept generation with exclusions
-- `agents/coloring_page_generator.py` - Safe zone prompt, previous_subjects field
-- `agents/coloring_qa_checker.py` - Stricter edge cutoff scoring
-
-### Previous Session Changes
-- Full Pipeline Working - Reference sheet → Page generation → Cover → PDF build
-- Theme-Dominant Prompting - Style generator emphasizes theme
-- QA Checker Bug Fixed - `NO_EDGE_CUTOFF` was missing from `score_keys`
-- Progress Bar Optimization - Targeted DOM updates
-- Character Sheet Guidance - Text + reference image for regeneration
-- Output Directory Organization - `ChildrensBook/` and `ColoringBook/` subdirs
+**Books Ready for Publishing:**
+- Priscilla's Magical Forest Adventure - **COMPLETE** (Interior 22MB, Cover 56KB, Kindle 815KB)
+- Thomass New Friend - Complete
+- Bianca the Cyborg Cows Space Adventure - Complete
+- Carl and the Enchanted Forest - Complete
+- Christopher and the Magical Cars - Complete
 
 ---
 
 ## Agent Status Reports
 
-### Coloring Book Agents (UPDATED)
-**Domain:** Coloring book generation pipeline
-**Status:** READY - Cost optimized with draft mode
-
-**Components:**
-- `coloring_style_generator.py` - Reference sheet + concept generation with uniqueness validation
-- `coloring_page_generator.py` - Individual page generation with safe zone framing + previous subjects tracking
-- `coloring_cover_generator.py` - Cover generation
-- `coloring_qa_checker.py` - GPT-4o-mini vision-based quality validation with strict edge checking
-
-**Recent Changes (2026-03-13):**
-- **Draft Mode Toggle:** All generators accept `draft_mode` parameter for cheaper testing
-- **Cost Savings:** Draft mode uses dall-e-2 (~$0.02/image vs ~$0.05/image)
-- **UI Toggle:** Switch on brief page to toggle between draft/production modes
-
-**Previous Changes (2026-03-12 PM):**
-- **Theme Flow Fixed:** Custom theme now preserved during UI interactions, validated on save
-- **Page Uniqueness:** LLM concepts now validated for 80%+ uniqueness, previous subjects passed to each page
-- **Edge Cutoff Prevention:** Safe zone framing in prompts, binary pass/fail QA scoring
-- Added THEME_GUIDELINES for: `insects`, `bugs`, `birds`
-- `PageConfig` now includes `previous_subjects: List[str]` field
-
-**Previous Changes (2026-03-12 AM):**
-- Fixed QA checker: `NO_EDGE_CUTOFF` now properly parsed from responses
-- Rewrote style generator prompt to put theme FIRST with strong emphasis
-- Added art style support throughout pipeline (zentangle, mandala, kawaii, etc.)
-
-**Current State:**
-- Generating coloring books with theme-appropriate content
-- Page uniqueness enforced via subject tracking
-- Edge cutoff strictly enforced with binary QA scoring
-- 10 art styles available
-- Age levels: kid, tween, teen, ya, adult, elder
-
-**Next Steps:**
-- Test end-to-end with "insects" theme to verify fixes
-- Add style preview images in UI
-- Consider batch generation for faster throughput
-
-**Blockers/Notes:**
-- Large page counts (24+) take significant time
-- Edge cutoff may cause more QA retries initially (intentional - better quality)
-
----
-
 ### Niche Researcher
-**Domain:** Market research, Amazon BSR analysis, keyword research
 **Status:** READY (with caveats)
 
-**Recent Changes:**
-- Fixed critical infinite recursion bug in `_get_keyword_suggestions()` when Amazon API fails
-- Now returns fallback-generated suggestions directly instead of recursive calls
+**Current Capabilities:**
+- Amazon category scanning (11 categories: dogs, foxes, bears, etc.)
+- Keyword research with auto-suggest expansion
+- Niche scoring and ranking by opportunity
+- Brief generation for each ranked niche
 
-**Current State:**
-- Agent functional using fallback/mock data (live Amazon scraping likely blocked)
-- `niche_report.json` contains 11 ranked niches: Dogs (#1), Bedtime (#2), Rhyming (#3)
-- 16 brief.json files found in output/ - active book production
+**Configuration:**
+- min_bsr: 100000
+- max_competition_reviews: 50
+- Using fallback/mock data (live Amazon scraping blocked)
+
+**Issues:**
+- **CRITICAL:** Competition score formula broken - all niches score 0
+  - Formula: `100 - (avg_reviews * 2)` clamps negative to 0 with review counts 150-500
+- Config settings (focus_categories, thresholds) not actually applied by agent
+- Abstract niches use generic character names ("Dream Character" vs specific animal)
 
 **Next Steps:**
-- Fix competition score formula (currently always 0 due to high review counts in fallback data)
-- Consider real data sources (Helium10, Jungle Scout API) for actual market data
-- Improve character generation for abstract niches (bedtime, emotions → specific animals)
-
-**Blockers/Notes:**
-- Competition metric useless with current formula (all niches score 0)
-- Recent books use custom briefs rather than auto-generated niche briefs
+1. Fix competition score formula (suggest: scale differently for 50-500 review range)
+2. Connect config settings to agent logic
+3. Map abstract niches to specific animals
 
 ---
 
 ### Story Engine
-**Domain:** Story generation, character creation, Amazon listing optimization
-**Status:** READY
+**Status:** PRODUCTION-READY
 
-**Recent Changes (2026-03-12 Evening):**
-- **Diversity content support:** Added explicit guidance for LGBTQ+, cultural, and social themes
-- References published children's books as examples (And Tango Makes Three, etc.)
-- Model: `gpt-4o` (gpt-4o-mini was too restrictive for diverse content)
+**Current Capabilities:**
+- 12-scene children's stories (AABB rhyming or prose)
+- Character creation from story text with diversity support
+- Amazon listing generation with SEO optimization
+- Quality validation (scene count, word count, rhyme patterns)
 
-**Previous Changes:**
-- **Major API migration:** Claude → OpenAI GPT-4o
-- Enhanced rate limit handling (max retries: 5, longer backoffs: 60-240s)
-- Improved grammar enforcement with external `grammar_guide.txt`
-- New `generate_character_from_story()` method for better character consistency
-- User notes now highlighted as "CRITICAL USER REQUIREMENTS"
+**Configuration:**
+- Model: gpt-4o (gpt-4o-mini too restrictive for diverse content)
+- Max retries: 5 with exponential backoff
+- Grammar guide: resources/grammar_guide.txt
 
-**Current State:**
-- Fully functional with diversity theme support
-- Grammar guide loaded from `resources/grammar_guide.txt`
-- Outputs `story_package.json` (contains story, character, listing)
+**Recent Activity:**
+- 25+ story packages generated
+- Latest: "The Adventures of Panda Pippin" (2026-03-13)
+- Diversity content support active (LGBTQ+, cultural themes)
+
+**Issues:**
+- Word count validation slightly tight (289 vs 300 minimum in some stories)
+- ARCHITECTURE.md still references Claude API (now uses OpenAI)
 
 **Next Steps:**
-- Update ARCHITECTURE.md to reflect Claude → OpenAI switch
-- Test diverse themes end-to-end
-
-**Blockers/Notes:**
-- Cost estimate in ARCHITECTURE.md outdated (was for Claude, now uses GPT-4o)
+1. Adjust word count minimum to 280-290 (more realistic for GPT-4o)
+2. Update ARCHITECTURE.md documentation
 
 ---
 
 ### Art Pipeline
-**Domain:** Illustration generation, character consistency, QA validation
 **Status:** READY - Cost optimized
 
-**Recent Changes (2026-03-12 Evening):**
-- **Cost optimization:** 75-85% reduction in image generation costs
-- Fixed retry bug (4 attempts → 3)
-- Added `CriticalImageFailure` for fail-fast on first image failure
-- Quality: `high` → `medium` (50% savings)
-- Vision QA: `gpt-4o` → `gpt-4o-mini` (30x cheaper)
-- Added `qa_first_only=True` - only QA character sheet, skip others
+**Current Capabilities:**
+- Character sheet generation (4-panel reference)
+- Scene illustration with reference-based consistency
+- Character DNA extraction via GPT-4o vision
+- Vision-based QA (gpt-4o-mini for cost savings)
+- Recurring character detection
 
-**Previous Changes:**
-- **Character Sheet Guidance** - Users can provide text guidance + reference image
-- **Model upgrade:** gpt-4o → gpt-image-1
-- Added reference image support for character likeness from photos
-- New "Character DNA" system for consistency across scenes
+**Configuration:**
+- Image model: gpt-image-1
+- Image quality: medium (50% cost savings)
+- QA: first image only (qa_first_only=True)
+- Max retries: 3
 
-**Current State:**
-- Cost-optimized pipeline (~$3-5/day vs $20/day)
-- 9+ books with successful art_result.json completions
-- Character sheet guidance working
+**Recent Activity:**
+- 15 books with art_result.json files
+- Thomass New Friend: Complete (13 files, 38MB)
+- Cost reduced 75-85% from previous settings
+
+**Issues:**
+- 3 recent books have empty spreads arrays in art_result.json
+- Eye highlight consistency sometimes requires retries
+- Character sheet naming inconsistent (space before underscore in some)
 
 **Next Steps:**
-- Monitor cost reduction effectiveness
-- Evaluate upgrading to gpt-image-1.5 for better consistency
-
-**Blockers/Notes:**
-- QA skipped on interior pages when `qa_first_only=True` (intentional for cost)
+1. Fix incomplete art_result.json files for Panda Pippin, Thomas variants
+2. Consider qa_first_spread option for early drift detection
 
 ---
 
 ### PDF Builder
-**Domain:** KDP-compliant PDF generation, cover creation, Kindle exports
 **Status:** READY
 
-**Recent Changes:**
-- Standardized output filenames: `Interior.pdf`, `Cover.pdf`, `Kindle_Cover.jpg`
-- Fixed ReportLab API: `setOpacity()` → `setFillAlpha()`
-- Fixed image dimension calculation (removed erroneous `/inch` division)
-- Fixed Kindle cover source (now uses actual `cover.png` from art/)
+**Current Capabilities:**
+- Interior PDF (4 trim sizes: 8.5x8.5, 8.5x11, 6x9, 5x8)
+- Wraparound cover with dynamic spine calculation
+- Kindle cover export (2560x3900 JPG)
+- Full-bleed images with text overlays
 
-**Current State:**
-- Working: Priscilla's book has all 3 files (Interior 22MB, Cover 56KB, Kindle 815KB)
-- Christopher's book only has cover (older naming convention)
+**Configuration:**
+- Trim: 8.5x8.5 inches
+- Bleed: 0.125 inches
+- Output: Interior.pdf, Cover.pdf, Kindle_Cover.jpg
+
+**Recent Activity:**
+- 9 complete PDF builds (Interior + Cover + Kindle)
+- Priscilla's book: 22MB interior, ready for KDP
+
+**Issues:**
+- 2 books have 15KB interior PDFs (Carl, Christophers_Magical_Car_Journey)
+  - Suggests PDFs built before art was available
+- Font paths Linux-specific (macOS fallback degraded)
 
 **Next Steps:**
-- Commit current filename standardization changes
-- Add PDF validation (page count, file size, structure)
-- Add macOS font paths (current fallback is Linux-specific)
-
-**Blockers/Notes:**
-- Recent changes uncommitted
-- Test PDF files in output directories could be cleaned up
+1. Rebuild failed PDFs (15KB files)
+2. Add validation to detect suspiciously small files
+3. Add macOS font path support
 
 ---
 
 ### KDP Publisher
-**Domain:** Amazon KDP automation, publishing workflow, pricing
-**Status:** READY (untested)
+**Status:** READY (untested end-to-end)
 
-**Recent Changes:**
-- Added `chrome_profile_name` parameter for profile selection
-- Updated Playwright launch args to pass profile directory
-- Improved logging for profile launch
+**Current Capabilities:**
+- Playwright browser automation
+- Paperback + eBook publishing workflows
+- AI disclosure field handling
+- Metadata automation (title, description, keywords, categories)
+- Pricing and KDP Select enrollment
+- Dry-run mode for testing
+- Chrome profile support for pre-authenticated sessions
+- **Content tab automation** (ISBN, print options, cover finish)
 
-**Current State:**
-- Full Playwright browser automation (769 lines)
-- Supports paperback + eBook workflows
-- AI disclosure fields implemented
-- Dry-run mode available
+**Configuration:**
+- use_chrome_profile: false (currently disabled)
+- chrome_profile_name: Profile 2
+- Author: "Starlit Stories Press"
+- Price: $9.99 paperback, $4.99 eBook
+
+**Recent Activity:**
+- 2026-03-14: Content tab automation improved based on manual testing
+- Manual publish attempt revealed missing automation steps
+- **ZERO** publish_result.json files found (never completed end-to-end)
+
+**Content Tab Automation (2026-03-14):**
+Based on manual KDP publish attempt for Priscilla's book, added:
+1. **ISBN Assignment** - Select "Get a free KDP ISBN" radio → Click "Assign ISBN"
+2. **Print Options** - Expand section if collapsed
+3. **Ink & Paper** - Select "Premium Color" (required for picture books)
+4. **Trim Size** - Select 8.5 x 8.5 in from dropdown
+5. **Bleed** - Select "No bleed" (our PDFs don't include bleed margins)
+6. **Cover Finish** - Select "Glossy"
+7. **Reading Direction** - Select "Left to Right"
+8. **Manuscript Upload** - Upload interior PDF with processing wait
+9. **Cover Upload** - Upload cover PDF with processing wait
+
+**Issues:**
+- Never run in production
+- CSS selectors need validation against live KDP UI
+- No screenshot capture on failure
 
 **Next Steps:**
-- **Run first real publish** (no publish_result.json files found = never tested end-to-end)
-- Validate selectors against live KDP UI
-- Add screenshot capture on failure for debugging
-
-**Blockers/Notes:**
-- **Never tested end-to-end:** Zero publish_result.json files exist
-- Credentials not in config (good) - must be passed at runtime
-- Chrome must be fully closed before automation runs
-- Manual intervention required if MFA triggered
+1. **First real publish:** Priscilla's Magical Forest Adventure
+2. Use dry-run mode first to validate selectors
+3. Add screenshot capture for debugging
 
 ---
 
-## Cross-Team Context
+## Active Books in Pipeline
 
-### Output Directory Structure (NEW)
-```
-output/
-├── ChildrensBook/
-│   └── {BookTitle}-{timestamp}/
-│       ├── brief.json
-│       ├── story_package.json
-│       ├── art/
-│       └── *.pdf
-└── ColoringBook/
-    └── {BookTitle}-{timestamp}/
-        ├── coloring_brief.json
-        ├── reference_sheet.png
-        ├── page_concepts.json
-        ├── pages/
-        └── *.pdf
-```
+### Ready for Publishing
+| Book | Location | Interior | Cover | Kindle | Status |
+|------|----------|----------|-------|--------|--------|
+| Priscillas_Magical_Forest_Adventure | output/ | 22MB | 56KB | 815KB | **READY TO PUBLISH** |
+| Thomass_New_Friend | output/ChildrensBook/ | 15MB | 75KB | 798KB | Ready |
+| Bianca_the_Cyborg_Cows_Space_Adventure | output/ | 10MB | 57KB | 649KB | Ready |
+| Carl_and_the_Enchanted_Forest | output/ | 15KB⚠️ | 65KB | 972KB | Needs rebuild |
+| Christopher_and_the_Magical_Cars | output/ | 15MB | 69KB | 869KB | Ready |
 
-### Active Books in Pipeline
-
-| Book ID | Type | Status | Stage | Next Action |
-|---------|------|--------|-------|-------------|
-| Priscillas_Magical_Forest_Adventure-20260307 | Children's | **COMPLETE** | PDF Done | Ready to publish |
-| Christopher_and_the_Magical_Cars-20260308 | Children's | Art Done | Cover Only | Needs Interior.pdf |
-| Baroque_Blooms-20260312 | Coloring | **COMPLETE** | 12 Pages Generated | Needs cover + PDF build |
-| Holidays__Seasons_Coloring_Book-20260312 | Coloring | In Progress | Pages | Generating pages |
-
-### Configuration State
-- `config/studio_config.yaml` properly configured
-- Chrome Profile 2 set for KDP automation
-- **Art quality: medium** (changed from high for cost savings)
-- **Vision QA: gpt-4o-mini** (changed from gpt-4o for cost savings)
-- **QA: first image only** (qa_first_only=True)
-- **Draft mode toggle:** Available in coloring book UI (dall-e-2 vs gpt-image-1)
-- Retries: 3 (fixed off-by-one bug)
-- Pricing: $9.99 paperback, $4.99 eBook
-
-### External Access
-- **URL:** https://bookfactory.backtoirl.com
-- **Tunnel:** `cloudflared tunnel run bookfactory`
-- **Auth:** Configure via Cloudflare Access dashboard
-
-### Known Issues (Updated)
-1. ~~**Art Pipeline QA broken**~~ - FIXED for coloring books
-2. ~~**Theme ignored in coloring books**~~ - FIXED: Custom theme now validated and preserved
-3. ~~**Duplicate pages in coloring books**~~ - FIXED: Subject uniqueness now enforced
-4. ~~**Edge cutoff passes QA**~~ - FIXED: Strict binary pass/fail scoring
-5. **Competition scores always 0** - Niche researcher formula issue
-6. **ARCHITECTURE.md outdated** - still references Claude for story generation
-
-### Uncommitted Changes
-- `generate_coloring_book.py` - Standalone coloring book generation script
-- `output/Baroque_Blooms-*` - Test coloring book outputs
-- `venv/` - Python virtual environment (should stay untracked)
+### In Progress
+| Book | Stage | Issue |
+|------|-------|-------|
+| Panda Pippin | Art | Spreads not in art_result.json |
+| Thomas Rainbow Friendship | Art | Spreads array empty |
+| Thomas Rainbow of Friends | Story | No art generated |
 
 ---
 
 ## Recommended Next Actions
 
-Based on agent analysis, prioritized by impact:
+### Priority 1: First KDP Publish
+1. **Publish Priscilla's book** - Complete with all 3 files
+2. Validate KDP selectors work with current UI
+3. Document any required manual interventions
 
-1. **Build Baroque Blooms PDF** - 12 pages generated, needs cover + PDF assembly
-2. **Publish Priscilla's book** - Ready for KDP, test the full publishing pipeline
-3. **Generate Interior.pdf for Christopher** - Art complete, needs PDF build
-4. **Test coloring book with "insects" theme** - Verify theme-specific fixes end-to-end
-5. **Update ARCHITECTURE.md** - Add coloring book pipeline documentation
+### Priority 2: Fix Pipeline Breaks
+4. Rebuild Carl's interior PDF (currently 15KB)
+5. Fix incomplete art_result.json files
+6. Add PDF size validation
+
+### Priority 3: Technical Debt
+7. Fix competition score formula in niche researcher
+8. Update ARCHITECTURE.md (Claude → OpenAI)
+9. Add macOS font support to PDF builder
 
 ---
 
-## Quick Links for Agents
+## Quick Reference
 
-| Agent | Primary Docs | Config |
-|-------|--------------|--------|
-| Niche Researcher | `ARCHITECTURE.md` | `config/studio_config.yaml` (research section) |
-| Story Engine | `resources/grammar_guide.txt`, `ARCHITECTURE.md` | `config/studio_config.yaml` (defaults) |
-| Art Pipeline | `prompting_skill.md`, `ARCHITECTURE.md` | `config/studio_config.yaml` (art section) |
-| Coloring Agents | `resources/coloring_style_skill.md` | Brief settings in UI |
-| PDF Builder | `ARCHITECTURE.md` | `config/studio_config.yaml` (defaults) |
-| KDP Publisher | `ARCHITECTURE.md` | `config/studio_config.yaml` (kdp section) |
+**Start Dashboard:** `python run.py` → http://localhost:5555
+
+**External Access:**
+- URL: https://bookfactory.backtoirl.com
+- Start tunnel: `cloudflared tunnel run bookfactory`
+
+**Configuration:** `config/studio_config.yaml`
+
+**Output Structure:**
+```
+output/
+├── ChildrensBook/{Title}-{timestamp}/
+│   ├── brief.json, story_package.json
+│   ├── art/, *.pdf
+└── ColoringBook/{Title}-{timestamp}/
+    ├── coloring_brief.json, reference_sheet.png
+    └── pages/, *.pdf
+```
