@@ -7,6 +7,10 @@
 
 ## Latest Changes (2026-03-14)
 
+### Dashboard Branding
+- Added **favicon** (open book icon) for browser tab
+- Dashboard accessible via Cloudflare tunnel: https://bookfactory.backtoirl.com
+
 ### KDP Content Tab Automation
 Based on manual KDP publish attempt for Priscilla's book, improved `_fill_content_tab_paperback()`:
 - **ISBN Assignment** - Select "Get a free KDP ISBN" → Click "Assign ISBN"

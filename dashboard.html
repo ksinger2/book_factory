@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Book Factory Studio</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
   :root {
     --bg: #0f0f13; --surface: #1a1a24; --surface2: #24243a;
@@ -1703,6 +1704,7 @@ function vOutput() {
 
     <div class="card">
       <h3>Downloads</h3>
+      ${S.gen.stages.pdf === 'done' ? `
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
         <a href="/api/files/${S.gen.bookId}/story_package.json" class="btn btn-secondary" download>Story JSON</a>
         <button onclick="previewPdf('${S.gen.bookId}','Interior.pdf','Interior PDF')" class="btn btn-secondary">Preview Interior</button>
@@ -1711,6 +1713,15 @@ function vOutput() {
         <a href="/api/files/${S.gen.bookId}/Cover.pdf" class="btn btn-secondary" download>Cover PDF</a>
         <a href="/api/files/${S.gen.bookId}/Kindle_Cover.jpg" class="btn btn-secondary" download>Kindle Cover</a>
       </div>
+      ` : `
+      <div class="alert alert-warn" style="margin-bottom:12px;">
+        PDFs not built yet. Run the "Build PDFs" stage on the Generate page first.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <a href="/api/files/${S.gen.bookId}/story_package.json" class="btn btn-secondary" download>Story JSON</a>
+        <button class="btn btn-primary" onclick="go(5);setTimeout(()=>runStage('pdf'),100);">Build PDFs Now</button>
+      </div>
+      `}
     </div>
     ` : `
     <div class="alert alert-warn">No book generated yet. Go to Generate step first.</div>
@@ -2648,6 +2659,7 @@ function vColoringPublish() {
 
     <div class="card">
       <h3>Downloads</h3>
+      ${S.coloring.stages.pdf === 'done' ? `
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
         <button onclick="previewPdf('${S.coloring.bookId}','Interior.pdf','Interior PDF')" class="btn btn-secondary">Preview Interior</button>
         <a href="/api/files/${S.coloring.bookId}/Interior.pdf" class="btn btn-secondary" download>Interior PDF</a>
@@ -2655,6 +2667,12 @@ function vColoringPublish() {
         <a href="/api/files/${S.coloring.bookId}/Cover.pdf" class="btn btn-secondary" download>Cover PDF</a>
         <a href="/api/files/${S.coloring.bookId}/Kindle_Cover.jpg" class="btn btn-secondary" download>Kindle Cover</a>
       </div>
+      ` : `
+      <div class="alert alert-warn" style="margin-bottom:12px;">
+        PDFs not built yet. Build them on the Format page first.
+      </div>
+      <button class="btn btn-primary" onclick="go(5);">Go to Format & Build PDFs</button>
+      `}
     </div>
 
     <div class="actions">
