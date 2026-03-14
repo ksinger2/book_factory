@@ -1,13 +1,21 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-13 19:45 (reinit)
-> **Session ID:** session-20260313c
+> **Last Updated:** 2026-03-14
+> **Session ID:** session-20260314a
 
 ---
 
-## Session Reinitialization Summary (2026-03-13 19:45)
+## Latest Changes (2026-03-14)
 
-All 5 domain agents synchronized. Key findings:
+### KDP Content Tab Automation
+Based on manual KDP publish attempt for Priscilla's book, improved `_fill_content_tab_paperback()`:
+- **ISBN Assignment** - Select "Get a free KDP ISBN" → Click "Assign ISBN"
+- **Print Options** - Premium Color, 8.5x8.5 trim, No bleed, Glossy finish
+- **Upload Flow** - Added `_wait_for_upload_complete()` for file processing
+
+---
+
+## Agent Status Summary
 
 | Agent | Status | Recent Activity | Critical Issues |
 |-------|--------|-----------------|-----------------|
@@ -15,7 +23,7 @@ All 5 domain agents synchronized. Key findings:
 | Story Engine | PRODUCTION-READY | 25+ books generated | Word count slightly tight (289 vs 300) |
 | Art Pipeline | READY | 15 books with art | 3 recent books missing spreads in art_result.json |
 | PDF Builder | READY | 9 complete PDFs | 2 books have 15KB interior PDFs (too small) |
-| KDP Publisher | UNTESTED | 0 publish attempts | Never run end-to-end |
+| KDP Publisher | READY | Content tab automated | Selectors need live validation |
 
 **Books Ready for Publishing:**
 - Priscilla's Magical Forest Adventure - **COMPLETE** (Interior 22MB, Cover 56KB, Kindle 815KB)
