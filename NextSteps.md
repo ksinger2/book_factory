@@ -1,11 +1,22 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-14
-> **Session ID:** session-20260314b
+> **Last Updated:** 2026-03-15
+> **Session ID:** session-20260315a
 
 ---
 
-## Latest Changes (2026-03-14)
+## Latest Changes (2026-03-15)
+
+### Story Regeneration with Additive Prompt
+- **Modal dialog** replaces confirm() when clicking "Regenerate Story"
+- **Textarea** for additional guidance (e.g., "Make it funnier", "Add a wise owl character")
+- **Guidance appended** to notes field with `=== ADDITIONAL GUIDANCE FOR REGENERATION ===` header
+- **Click-outside-to-close** behavior for better UX
+- **Tested** with 9 end-to-end Playwright tests (all passing)
+
+---
+
+## Previous Changes (2026-03-14)
 
 ### Coloring Book Marketing Tab
 - **Marketing tab** added to Coloring Book Publish step

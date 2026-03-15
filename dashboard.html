@@ -1028,6 +1028,15 @@ async function runStage(stage, extraParams = {}) {
         formats: S.book.formats,
         reference_image: S.book.referenceImage
       };
+
+      // Append additional prompt to notes if provided
+      if (extraParams.additionalPrompt) {
+        const separator = brief.notes ? '\n\n' : '';
+        brief.notes = (brief.notes || '') + separator +
+          '=== ADDITIONAL GUIDANCE FOR REGENERATION ===\n' +
+          extraParams.additionalPrompt;
+      }
+
       const r = await api('/api/story', brief);
       if (r.ok) {
         S.gen.bookId = r.book_id;
@@ -1222,8 +1231,21 @@ function cancelGeneration(stage) {
   }
 }
 
-async function regenerateStory() {
-  if (!confirm('Regenerate the story? This will create a new version.')) return;
+function regenerateStory() {
+  // Show modal instead of confirm dialog
+  document.getElementById('storyRegenModal').style.display = 'flex';
+  document.getElementById('storyRegenFeedback').value = '';
+  document.getElementById('storyRegenFeedback').focus();
+}
+
+function closeStoryRegenModal() {
+  document.getElementById('storyRegenModal').style.display = 'none';
+}
+
+async function confirmStoryRegen() {
+  const additionalPrompt = document.getElementById('storyRegenFeedback').value.trim();
+  closeStoryRegenModal();
+
   // Reset story-related state but keep the book brief
   S.gen.story = null;
   S.gen.bookId = null;
@@ -1238,8 +1260,9 @@ async function regenerateStory() {
   S.gen.editingScene = null;
   S.gen.log.push(`[${new Date().toLocaleTimeString()}] Regenerating story...`);
   render();
-  // Auto-run story generation
-  await runStage('story');
+
+  // Pass additional prompt to story generation
+  await runStage('story', { additionalPrompt });
 }
 
 // ─── Character Sheet Approval ───
@@ -3056,6 +3079,19 @@ function closePdfModal() {
       <button onclick="closePdfModal()" class="btn btn-ghost" style="padding:4px 12px;">Close</button>
     </div>
     <iframe id="pdfFrame" src=""></iframe>
+  </div>
+</div>
+
+<!-- Story Regen Modal -->
+<div id="storyRegenModal" class="regen-modal" onclick="if(event.target===this)closeStoryRegenModal()">
+  <div class="regen-modal-content" style="max-width:500px;">
+    <h3>Regenerate Story</h3>
+    <p>Add optional guidance for the new story:</p>
+    <textarea id="storyRegenFeedback" placeholder="e.g., Make it funnier, add a wise owl character, focus more on the friendship theme..."></textarea>
+    <div class="regen-modal-actions">
+      <button class="btn btn-ghost" onclick="closeStoryRegenModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmStoryRegen()">Regenerate</button>
+    </div>
   </div>
 </div>
 
