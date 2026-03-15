@@ -509,7 +509,7 @@ Return as JSON:
         Generate SEO-optimized Amazon listing.
 
         Args:
-            story: Generated story dict with title
+            story: Generated story dict with title, scenes, and character
             brief: Original story brief
 
         Returns:
@@ -519,24 +519,60 @@ Return as JSON:
 Create compelling, SEO-optimized listings that convert readers.
 Use age-appropriate keywords and category choices.
 Focus on emotional benefits and learning outcomes.
+Reference specific story content to make descriptions unique and engaging.
 
 Return valid JSON format."""
 
         story_title = story.get('title', 'Untitled Story')
-        user_prompt = f"""Create an Amazon listing for this children's book:
-Story Title: {story_title}
-Theme: {brief.get('theme', 'adventure')}
-Main Character: {brief.get('animal', 'woodland creature')}
-Age Range: {brief.get('age_range', '3-5 years')}
-Lesson: {brief.get('lesson', 'friendship')}
 
-Generate:
+        # Extract character details - use actual character data, not just brief
+        character = story.get('character', {})
+        character_name = character.get('name', brief.get('animal', 'main character'))
+        character_species = character.get('species', brief.get('animal', 'creature'))
+        character_description = character.get('description', '')[:200] if character.get('description') else ''
+
+        # Build scene summaries from actual story content
+        scenes = story.get('scenes', [])
+        scene_summaries = []
+        for i, scene in enumerate(scenes[:6], 1):  # First 6 scenes for summary
+            scene_text = ' '.join(scene.get('text', []))
+            if scene_text:
+                scene_summaries.append(f"Scene {i}: {scene_text[:150]}...")
+        scene_summary_text = '\n'.join(scene_summaries) if scene_summaries else 'Adventure story with magical moments'
+
+        # Extract a memorable quote from the story (from later scenes for impact)
+        memorable_quote = ''
+        for scene in reversed(scenes[-3:]):  # Check last 3 scenes
+            text_lines = scene.get('text', [])
+            if text_lines and len(text_lines) >= 2:
+                # Get a couplet that might be memorable
+                quote_candidate = ' '.join(text_lines[:2])
+                if len(quote_candidate) > 20 and len(quote_candidate) < 150:
+                    memorable_quote = quote_candidate
+                    break
+
+        user_prompt = f"""Create an Amazon listing for this children's book.
+
+STORY TITLE: {story_title}
+CHARACTER: {character_name} the {character_species}
+CHARACTER DESCRIPTION: {character_description}
+AGE RANGE: {brief.get('age_range', '3-5 years')}
+THEME: {brief.get('theme', 'adventure')}
+LESSON: {brief.get('lesson', 'friendship')}
+
+STORY CONTENT (key scenes):
+{scene_summary_text}
+
+MEMORABLE QUOTE FROM STORY: "{memorable_quote}"
+
+Generate a listing that:
 1. SEO-optimized title with subtitle (max 200 chars total)
-2. Compelling description with bullet points highlighting:
-   - Age appropriateness
-   - Learning outcome
-   - Story appeal
-   - Illustration quality
+2. Compelling description that:
+   - Opens with an engaging hook mentioning {character_name} the {character_species} correctly
+   - Summarizes the actual adventure (mention 2-3 specific story moments from the scenes above)
+   - Lists 3 bullet points about what makes this book special (themes, age appropriateness, illustration style)
+   - Mentions the illustration style and number of scenes (12 illustrated pages)
+   - Ends with the memorable quote from the story (or create one in the story's style)
 3. 7 backend keywords (for Amazon search optimization)
 4. 2 appropriate book categories
 
@@ -544,7 +580,7 @@ Return as JSON:
 {{
     "title": "Full Book Title",
     "subtitle": "Engaging subtitle",
-    "description": "Compelling description with bullet points about the story benefits and content",
+    "description": "Compelling description with bullet points about the story benefits and content. Use markdown formatting with **bold** for emphasis and bullet points.",
     "keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5", "keyword6", "keyword7"],
     "categories": ["Children's Books > Animals", "Children's Books > Emotions & Feelings"]
 }}"""
