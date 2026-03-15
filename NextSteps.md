@@ -7,6 +7,11 @@
 
 ## Latest Changes (2026-03-14)
 
+### Coloring Book Marketing Tab
+- **Marketing tab** added to Coloring Book Publish step
+  - Same functionality as Children's Book marketing (keywords, categories, description, ads, social)
+  - Uses existing `/api/marketing/analyze` endpoint with `ColoringBook/` prefix
+
 ### Removed Find Niche + Added KDP Marketing Agent
 Major pipeline refactor:
 - **Removed** Niche Researcher agent and "Find Niche" step (non-functional Amazon scraping)

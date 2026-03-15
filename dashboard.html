@@ -2730,9 +2730,35 @@ async function buildColoringPDFs() {
 
 // ─── Coloring Step 7: Publish ───
 function vColoringPublish() {
+  // Tab toggle for publish/marketing
+  const tabs = `
+    <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid var(--border);">
+      <button class="btn ${S.coloring.publishTab === 'publish' ? 'btn-primary' : 'btn-ghost'}"
+              style="border-radius:6px 6px 0 0;border-bottom:none;"
+              onclick="S.coloring.publishTab='publish';render()">📦 Publish</button>
+      <button class="btn ${S.coloring.publishTab === 'marketing' ? 'btn-primary' : 'btn-ghost'}"
+              style="border-radius:6px 6px 0 0;border-bottom:none;"
+              onclick="S.coloring.publishTab='marketing';render()">📈 Marketing</button>
+    </div>`;
+
+  // Show marketing tab if selected
+  if (S.coloring.publishTab === 'marketing') {
+    return `<div class="step active">
+      <h2>Publish to KDP</h2>
+      <p class="sub">Upload your coloring book to Amazon Kindle Direct Publishing.</p>
+      ${tabs}
+      ${vColoringMarketingTab()}
+      <div class="actions">
+        <button class="btn btn-ghost" onclick="go(5)">← Format</button>
+        <button class="btn btn-green" onclick="startNewColoringBook()">New Coloring Book</button>
+      </div>
+    </div>`;
+  }
+
   return `<div class="step active">
     <h2>Publish to KDP</h2>
     <p class="sub">Upload your coloring book to Amazon Kindle Direct Publishing.</p>
+    ${tabs}
 
     ${S.coloring.stages.pdf !== 'done' ? `
     <div class="alert alert-warn">PDFs not built yet. Go back and build them first.</div>
@@ -2820,6 +2846,174 @@ async function publishColoringBook(dryRun) {
   render();
 }
 
+// ─── Coloring Book Marketing Tab ───
+function vColoringMarketingTab() {
+  const m = S.coloring.marketingResult;
+  const loading = S.coloring.marketingLoading;
+
+  if (loading) {
+    return `
+    <div class="card" style="text-align:center;padding:40px;">
+      <div class="spinner" style="width:32px;height:32px;margin:0 auto 16px;"></div>
+      <p style="color:var(--text);font-weight:500;">Analyzing your coloring book...</p>
+      <p style="color:var(--dim);font-size:12px;margin-top:8px;">Generating keywords, categories, description, ads, and social content</p>
+    </div>`;
+  }
+
+  if (!m) {
+    return `
+    <div class="card" style="text-align:center;padding:40px;">
+      <h3 style="margin-bottom:12px;">📈 KDP Marketing Assistant</h3>
+      <p style="color:var(--dim);margin-bottom:20px;">
+        Get AI-powered marketing recommendations for your coloring book:<br/>
+        Keywords, categories, optimized description, Amazon Ads, and social content.
+      </p>
+      <button class="btn btn-primary" onclick="runColoringMarketingAnalysis()">
+        ✨ Analyze & Generate Marketing Plan
+      </button>
+    </div>`;
+  }
+
+  // Display marketing results
+  const listing = m.optimized_listing || {};
+  const keywords = listing.keywords || [];
+  const categories = listing.categories || [];
+  const description = listing.description || '';
+  const adCampaign = m.ad_campaign || {};
+  const socialPosts = m.social_posts || [];
+  const quickWins = m.quick_wins || [];
+
+  return `
+    <div class="card">
+      <h3>🔑 Optimized Keywords (7 for KDP)</h3>
+      <p class="hint" style="margin-bottom:12px;">Copy these keywords to your KDP listing</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+        ${keywords.map(kw => `<span class="tag" style="padding:6px 12px;font-size:12px;cursor:pointer;" onclick="copyToClipboard('${kw.replace(/'/g, "\\'")}')" title="Click to copy">${kw}</span>`).join('')}
+      </div>
+      <button class="btn btn-secondary" onclick="copyToClipboard('${keywords.join(', ').replace(/'/g, "\\'")}')">📋 Copy All Keywords</button>
+    </div>
+
+    <div class="card">
+      <h3>📂 Recommended Categories</h3>
+      ${categories.map(cat => `
+        <div style="padding:10px;background:var(--bg);border-radius:6px;margin-bottom:8px;">
+          <div style="font-weight:500;font-size:13px;">${cat.path || cat}</div>
+          ${cat.reasoning ? `<div style="font-size:11px;color:var(--dim);margin-top:4px;">${cat.reasoning}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card">
+      <h3>📝 Optimized Description</h3>
+      <p class="hint" style="margin-bottom:12px;">Copy this HTML-formatted description to KDP</p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.7;max-height:300px;overflow-y:auto;">
+        ${description}
+      </div>
+      <button class="btn btn-secondary" style="margin-top:12px;" onclick="copyToClipboard(S.coloring.marketingResult?.optimized_listing?.description || '')">📋 Copy Description</button>
+    </div>
+
+    ${adCampaign.keywords?.length ? `
+    <div class="card">
+      <h3>💰 Amazon Ads Campaign Plan</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:var(--bg);padding:12px;border-radius:6px;">
+          <div style="font-size:11px;color:var(--dim);">Daily Budget</div>
+          <div style="font-size:18px;font-weight:600;color:var(--green);">$${adCampaign.daily_budget || '10'}</div>
+        </div>
+        <div style="background:var(--bg);padding:12px;border-radius:6px;">
+          <div style="font-size:11px;color:var(--dim);">Expected ACoS</div>
+          <div style="font-size:18px;font-weight:600;color:var(--yellow);">${adCampaign.expected_acos || 'Medium'}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:12px;">${adCampaign.targeting_strategy || ''}</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <tr style="color:var(--dim);text-align:left;border-bottom:1px solid var(--border);">
+          <th style="padding:8px 0;">Keyword</th>
+          <th>Match</th>
+          <th>Bid</th>
+        </tr>
+        ${(adCampaign.keywords || []).map(kw => `
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 0;">${kw.keyword}</td>
+            <td>${kw.match_type}</td>
+            <td>$${kw.suggested_bid?.toFixed(2) || '0.50'}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>
+    ` : ''}
+
+    ${socialPosts.length ? `
+    <div class="card">
+      <h3>📱 Social Media Content</h3>
+      <div style="display:grid;gap:12px;">
+        ${socialPosts.map(post => `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:600;text-transform:capitalize;">${post.platform}</span>
+              <span style="font-size:10px;color:var(--dim);">${post.best_posting_time || ''}</span>
+            </div>
+            <div style="font-size:13px;line-height:1.6;margin-bottom:8px;">${post.content}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${(post.hashtags || []).map(h => `<span style="font-size:11px;color:var(--accent);">#${h}</span>`).join('')}
+            </div>
+            <button class="btn btn-ghost" style="margin-top:8px;font-size:11px;" onclick="copyToClipboard(\`${(post.content || '').replace(/`/g, '\\`')} ${(post.hashtags || []).map(h => '#' + h).join(' ')}\`)">📋 Copy</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    ${quickWins.length ? `
+    <div class="card">
+      <h3>⚡ Quick Wins Checklist</h3>
+      <p class="hint" style="margin-bottom:12px;">Immediate actions to boost your coloring book's visibility</p>
+      <div style="display:grid;gap:8px;">
+        ${quickWins.map((win, i) => `
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:8px;background:var(--bg);border-radius:6px;">
+            <input type="checkbox" id="cqw-${i}" style="margin-top:3px;"/>
+            <span style="font-size:13px;">${win}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card">
+      <button class="btn btn-secondary" onclick="runColoringMarketingAnalysis()">
+        🔄 Regenerate Marketing Analysis
+      </button>
+    </div>
+  `;
+}
+
+// Run coloring book marketing analysis
+async function runColoringMarketingAnalysis() {
+  if (!S.coloring.bookId) {
+    alert('No coloring book to analyze. Generate a book first.');
+    return;
+  }
+
+  S.coloring.marketingLoading = true;
+  S.coloring.publishTab = 'marketing';
+  render();
+
+  try {
+    const result = await api('/api/marketing/analyze', { book_id: 'ColoringBook/' + S.coloring.bookId });
+    if (result.ok) {
+      S.coloring.marketingResult = result.result;
+      S.coloring.log.push('Marketing analysis complete');
+    } else {
+      alert('Marketing analysis failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Server error: ' + e.message);
+  }
+
+  S.coloring.marketingLoading = false;
+  render();
+}
+
 function startNewColoringBook() {
   S.coloring = {
     draftMode: false,  // Use cheaper models for testing
@@ -2827,7 +3021,8 @@ function startNewColoringBook() {
     bookId: null, referenceSheet: null, referenceApproved: false, concepts: [], pages: [],
     cover: null, backCover: null,
     stages: {brief:'pending', reference:'pending', pages:'pending', cover:'pending', pdf:'pending', publish:'pending'},
-    progress: null, log: []
+    progress: null, log: [],
+    marketingResult: null, marketingLoading: false, publishTab: 'publish'
   };
   go(1);
 }
