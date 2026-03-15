@@ -122,26 +122,62 @@ def api_config():
     return jsonify({"ok": True})
 
 
-@app.route('/api/research', methods=['POST'])
-def api_research():
-    """Run niche research."""
+@app.route('/api/marketing/analyze', methods=['POST'])
+def api_marketing_analyze():
+    """Run full marketing analysis for a book."""
     try:
-        from agents.niche_researcher import NicheResearcher
+        from agents.kdp_marketing import KDPMarketingAgent
 
         data = request.json or {}
-        use_fallback = data.get("use_fallback", True)
+        book_id = data.get("book_id")
 
-        researcher = NicheResearcher(use_fallback=use_fallback)
-        results = researcher.run()
+        if not book_id:
+            return jsonify({"ok": False, "error": "No book_id provided"}), 400
 
-        # Save results
-        report_path = OUTPUT_DIR / "niche_report.json"
-        with open(report_path, 'w') as f:
-            json.dump(results, f, indent=2, default=str)
+        book_dir = OUTPUT_DIR / book_id
+        if not book_dir.exists():
+            return jsonify({"ok": False, "error": "Book not found"}), 404
 
-        return jsonify({"ok": True, "niches": results, "saved_to": str(report_path)})
+        agent = KDPMarketingAgent()
+        result = agent.run(str(book_dir))
+
+        # Convert dataclass to dict for JSON serialization
+        from dataclasses import asdict
+        return jsonify({"ok": True, "result": asdict(result)})
+
     except Exception as e:
-        log.exception("Research failed")
+        log.exception("Marketing analysis failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route('/api/marketing/keywords', methods=['POST'])
+def api_marketing_keywords():
+    """Quick keyword-only analysis."""
+    try:
+        from agents.kdp_marketing import KDPMarketingAgent
+
+        data = request.json or {}
+        book_id = data.get("book_id")
+
+        if not book_id:
+            return jsonify({"ok": False, "error": "No book_id provided"}), 400
+
+        book_dir = OUTPUT_DIR / book_id
+        if not book_dir.exists():
+            return jsonify({"ok": False, "error": "Book not found"}), 404
+
+        agent = KDPMarketingAgent()
+        book_data = agent._load_book_data(str(book_dir))
+        keywords = agent.analyze_keywords(book_data)
+
+        from dataclasses import asdict
+        return jsonify({
+            "ok": True,
+            "keywords": [asdict(kw) for kw in keywords]
+        })
+
+    except Exception as e:
+        log.exception("Keyword analysis failed")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

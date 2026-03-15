@@ -234,12 +234,11 @@ const S = {
     artStyle:'Soft gouache/watercolor painting. Warm, textured, hand-painted look. Rich but not oversaturated colors. Visible painterly brushstroke texture. Similar to Pete Oswald or Benji Davies children\'s book illustrations.',
     trimSize:'8.5x8.5', formats:['paperback','ebook'], pricePaperback:'9.99', priceEbook:'4.99'
   },
-  research: { results:[], selected:null, loading:false },
   gen: {
     bookId:null, story:null, artProgress:null,
     characterSheet: null,       // Path to character sheet image
     charsheetApproved: false,   // Whether character sheet is approved
-    stages:{research:'pending',story:'pending',charsheet:'pending',illustrations:'pending',pdf:'pending',publish:'pending'},
+    stages:{story:'pending',charsheet:'pending',illustrations:'pending',pdf:'pending',publish:'pending'},
     log:[],
     generatedImages: [],  // [{type:'cover'|'spread'|'character_sheet', index:1, path:'scene_01.png'}]
     editingScene: null,   // Index of scene being edited, or null
@@ -248,7 +247,11 @@ const S = {
     charsheetRegenReferencePreview: '',  // Preview URL for regeneration reference
     progressTimer: null,              // Interval ID for progress updates
     progressStart: null,              // Timestamp when generation started
-    progressElapsed: 0                // Seconds elapsed
+    progressElapsed: 0,               // Seconds elapsed
+    // Marketing tab state
+    outputTab: 'files',               // 'files' or 'marketing'
+    marketingResult: null,            // Result from /api/marketing/analyze
+    marketingLoading: false           // Loading state for marketing analysis
   },
   // Coloring book state
   coloring: {
@@ -351,12 +354,11 @@ const COLORING_STEPS = [
 
 const STEPS = [
   {id:'setup',name:'Setup',icon:'1'},
-  {id:'research',name:'Find Niche',icon:'2'},
-  {id:'brief',name:'Book Brief',icon:'3'},
-  {id:'style',name:'Art Style',icon:'4'},
-  {id:'format',name:'Format & Price',icon:'5'},
-  {id:'generate',name:'Generate',icon:'6'},
-  {id:'output',name:'Output',icon:'7'}
+  {id:'brief',name:'Book Brief',icon:'2'},
+  {id:'style',name:'Art Style',icon:'3'},
+  {id:'format',name:'Format & Price',icon:'4'},
+  {id:'generate',name:'Generate',icon:'5'},
+  {id:'output',name:'Output',icon:'6'}
 ];
 
 const CATS = [
@@ -405,7 +407,7 @@ function render() {
   if (S.mode === 'coloring') {
     views = [vSetup, vColoringBrief, vColoringReference, vColoringPages, vColoringCover, vColoringFormat, vColoringPublish];
   } else {
-    views = [vSetup, vResearch, vBrief, vStyle, vFormat, vGenerate, vOutput];
+    views = [vSetup, vBrief, vStyle, vFormat, vGenerate, vOutput];
   }
   document.getElementById('content').innerHTML = views[S.step]();
   bind();
@@ -415,7 +417,7 @@ function render() {
     // Delay to ensure form elements exist
     setTimeout(() => { S.coloringBriefSaved = getCurrentColoringBrief(); }, 0);
   }
-  if (S.mode === 'childrens' && S.step === 2 && !S.bookBriefSaved) {
+  if (S.mode === 'childrens' && S.step === 1 && !S.bookBriefSaved) {
     setTimeout(() => { S.bookBriefSaved = getCurrentBookBrief(); }, 0);
   }
 }
@@ -443,7 +445,7 @@ function go(n) {
   if (S.mode === 'coloring' && S.step === 1 && hasColoringBriefChanges()) {
     if (!confirm('You have unsaved changes. Proceed without saving?')) return;
   }
-  if (S.mode === 'childrens' && S.step === 2 && hasBookBriefChanges()) {
+  if (S.mode === 'childrens' && S.step === 1 && hasBookBriefChanges()) {
     if (!confirm('You have unsaved changes. Proceed without saving?')) return;
   }
   S.step=n; render(); window.scrollTo(0,0);
@@ -525,105 +527,7 @@ async function saveSetup() {
   go(1);
 }
 
-// ─── Step 2: Research ───
-function vResearch() {
-  const cards = S.research.results.map((n,i) => {
-    const demand = Math.min(100, Math.round((1 - (n.bsr||50000)/200000) * 100));
-    const comp = Math.min(100, Math.round(((n.reviews||30)/100) * 100));
-    const why = demand>60&&comp<40 ? 'High demand, few competitors — great opportunity'
-              : demand>60 ? 'Strong demand but some competition'
-              : comp<40 ? 'Low competition, moderate demand'
-              : 'Worth exploring';
-    return `<div class="niche-card ${S.research.selected===i?'selected':''}" onclick="pickNiche(${i})">
-      <div class="niche-top">
-        <span class="niche-name">${n.name||n.category||'Niche'}</span>
-        <span class="niche-score">${n.score||'—'}</span>
-      </div>
-      <div class="niche-meter">
-        <div class="niche-meter-label"><span>Demand (people buying)</span><span>${demand}%</span></div>
-        <div class="meter-track"><div class="meter-fill demand" style="width:${demand}%"></div></div>
-      </div>
-      <div class="niche-meter">
-        <div class="niche-meter-label"><span>Competition (harder to rank)</span><span>${comp}%</span></div>
-        <div class="meter-track"><div class="meter-fill competition" style="width:${comp}%"></div></div>
-      </div>
-      <div class="niche-why">${why}</div>
-      ${(n.keywords||[]).length ? `<div class="niche-tags">${n.keywords.map(k=>`<span class="tag">${k}</span>`).join('')}</div>` : ''}
-    </div>`;
-  }).join('');
-
-  return `<div class="step active">
-    <h2>Find a Niche</h2>
-    <p class="sub">Discover which categories have buyers but few competitors — your best chance to get discovered as a new author.</p>
-
-    <div class="card">
-      <h3>Quick Pick (or run full research below)</h3>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${CATS.map(c => `<span class="tag" style="cursor:pointer;padding:5px 12px;font-size:12px;${S.book.category.includes(c)?'background:var(--accent-bg);color:var(--accent2);border:1px solid var(--accent);':''}" onclick="quickCat('${c}')">${c}</span>`).join('')}
-      </div>
-    </div>
-
-    <div class="card">
-      <h3>Research Results</h3>
-      ${S.research.loading ? '<div style="text-align:center;padding:20px;"><div class="spinner"></div><p style="color:var(--dim);font-size:12px;margin-top:8px;">Scanning Amazon categories...</p></div>' :
-        cards || '<p style="color:var(--dim);font-size:13px;">Click "Run Research" to scan Amazon for opportunities, or pick a category above.</p>'}
-      <div style="margin-top:12px;display:flex;gap:8px;">
-        <button class="btn btn-primary" onclick="runResearch()" ${S.research.loading?'disabled':''}>
-          ${S.research.loading?'<span class="spinner"></span> Researching...':'Run Research'}
-        </button>
-        <button class="btn btn-secondary" onclick="loadSample()">Use Sample Data</button>
-      </div>
-    </div>
-
-    <div class="alert alert-info">
-      <strong>How to read these:</strong> Green bar = demand (are people buying?). Red bar = competition (how hard to rank). High demand + low competition = best opportunity. Score combines both into one number.
-    </div>
-
-    <div class="actions">
-      <button class="btn btn-ghost" onclick="go(0)">← Setup</button>
-      <button class="btn btn-primary" onclick="go(2)">Continue →</button>
-    </div>
-  </div>`;
-}
-
-function quickCat(c) {
-  S.book.category = "Children's " + c;
-  render();
-}
-
-function pickNiche(i) {
-  S.research.selected = i;
-  const n = S.research.results[i];
-  S.book.category = n.name || n.category || '';
-  S.book.theme = n.theme || n.brief?.theme || '';
-  S.book.animal = n.animal || n.brief?.animal || '';
-  S.book.lesson = n.lesson || n.brief?.lesson || '';
-  S.book.setting = n.setting || n.brief?.setting || '';
-  render();
-}
-
-async function runResearch() {
-  S.research.loading = true; render();
-  try {
-    const r = await api('/api/research', { use_fallback: false });
-    if (r.ok) S.research.results = r.niches || [];
-    else alert('Research failed: ' + (r.error||'Unknown error'));
-  } catch(e) { alert('Server error: ' + e.message); }
-  S.research.loading = false; render();
-}
-
-function loadSample() {
-  S.research.results = [
-    {name:"Children's Fox Books",score:82,bsr:54000,reviews:23,keywords:["fox bedtime story","cute fox book toddler"],theme:"forest adventure",animal:"fox",lesson:"bravery"},
-    {name:"Children's Penguin Books",score:78,bsr:61000,reviews:31,keywords:["penguin story for kids","baby penguin book"],theme:"winter friendship",animal:"penguin",lesson:"friendship"},
-    {name:"Children's Dragon Books",score:75,bsr:48000,reviews:42,keywords:["friendly dragon book","dragon adventure"],theme:"overcoming fears",animal:"dragon",lesson:"courage"},
-    {name:"Children's Bunny Books",score:71,bsr:72000,reviews:18,keywords:["bunny rabbit story","cute bunny book"],theme:"springtime discovery",animal:"bunny",lesson:"curiosity"},
-    {name:"Children's Owl Books",score:68,bsr:89000,reviews:15,keywords:["owl bedtime story","wise owl book"],theme:"nighttime exploration",animal:"owl",lesson:"wisdom"}
-  ];
-  render();
-}
-
-// ─── Step 3: Brief ───
+// ─── Step 2: Brief ───
 function vBrief() {
   return `<div class="step active">
     <h2>Book Brief</h2>
@@ -686,7 +590,7 @@ function vBrief() {
       </div>
     </div>
     <div class="actions">
-      <button class="btn btn-ghost" onclick="go(1)">← Research</button>
+      <button class="btn btn-ghost" onclick="go(0)">← Setup</button>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-secondary" onclick="saveBriefOnly()">Save</button>
         <button class="btn btn-primary" onclick="saveBrief()">Continue →</button>
@@ -754,7 +658,7 @@ function saveBrief() {
   S.book.rhyming=document.getElementById('rhyming')?.checked ?? true;
   // Update saved state snapshot for change detection
   S.bookBriefSaved = getCurrentBookBrief();
-  go(3);
+  go(2);
 }
 
 // Save children's book brief without navigating away
@@ -803,7 +707,7 @@ function vStyle() {
       <strong>Eye consistency</strong> is auto-injected into every prompt: "Large, round, dark brown irises with TWO bright white highlight dots." You don't need to add this.
     </div>
     <div class="actions">
-      <button class="btn btn-ghost" onclick="go(2)">← Brief</button>
+      <button class="btn btn-ghost" onclick="go(1)">← Brief</button>
       <button class="btn btn-primary" onclick="saveStyle()">Continue →</button>
     </div>
   </div>`;
@@ -816,7 +720,7 @@ function pickStyle(i) {
   if (s.name==='Custom') document.getElementById('artStyle')?.focus();
 }
 
-function saveStyle() { S.book.artStyle = v('artStyle'); go(4); }
+function saveStyle() { S.book.artStyle = v('artStyle'); go(3); }
 
 // ─── Step 5: Format & Price ───
 function vFormat() {
@@ -857,7 +761,7 @@ function vFormat() {
       <div class="cost-row"><span>Total per book</span><span>~$1.30</span></div>
     </div>
     <div class="actions">
-      <button class="btn btn-ghost" onclick="go(3)">← Style</button>
+      <button class="btn btn-ghost" onclick="go(2)">← Style</button>
       <button class="btn btn-primary" onclick="saveFmt()">Continue →</button>
     </div>
   </div>`;
@@ -873,7 +777,7 @@ function saveFmt() {
   S.book.trimSize = v('trimSize');
   S.book.pricePaperback = v('pricePb');
   S.book.priceEbook = v('priceEb');
-  go(5);
+  go(4);
 }
 
 // ─── Step 6: Generate ───
@@ -1100,7 +1004,7 @@ function vGenerate() {
     </div>` : ''}
 
     <div class="actions">
-      <button class="btn btn-ghost" onclick="go(4)">← Format</button>
+      <button class="btn btn-ghost" onclick="go(3)">← Format</button>
       <button class="btn btn-primary" onclick="go(6)" ${!S.gen.bookId?'disabled':''}>View Output →</button>
     </div>
   </div>`;
@@ -1687,11 +1591,14 @@ async function loadDemoStory() {
   }
 }
 
-// ─── Step 7: Output ───
+// ─── Step 6: Output ───
 function vOutput() {
+  const hasMarketing = S.gen.marketingResult !== undefined;
+  const showMarketing = S.gen.outputTab === 'marketing';
+
   return `<div class="step active">
     <h2>Output</h2>
-    <p class="sub">Your generated book files.</p>
+    <p class="sub">Your generated book files and marketing tools.</p>
 
     ${S.gen.bookId ? `
     <div class="card">
@@ -1702,6 +1609,18 @@ function vOutput() {
       </div>
     </div>
 
+    <!-- Tab navigation -->
+    <div style="display:flex;gap:0;margin-bottom:16px;">
+      <button class="btn ${!showMarketing ? 'btn-primary' : 'btn-secondary'}" onclick="S.gen.outputTab='files';render();" style="border-radius:8px 0 0 8px;">
+        📁 Files
+      </button>
+      <button class="btn ${showMarketing ? 'btn-primary' : 'btn-secondary'}" onclick="S.gen.outputTab='marketing';render();" style="border-radius:0 8px 8px 0;">
+        📈 Marketing
+      </button>
+    </div>
+
+    ${!showMarketing ? `
+    <!-- Files Tab -->
     <div class="card">
       <h3>Downloads</h3>
       ${S.gen.stages.pdf === 'done' ? `
@@ -1719,24 +1638,215 @@ function vOutput() {
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;">
         <a href="/api/files/${S.gen.bookId}/story_package.json" class="btn btn-secondary" download>Story JSON</a>
-        <button class="btn btn-primary" onclick="go(5);setTimeout(()=>runStage('pdf'),100);">Build PDFs Now</button>
+        <button class="btn btn-primary" onclick="go(4);setTimeout(()=>runStage('pdf'),100);">Build PDFs Now</button>
       </div>
       `}
     </div>
+    ` : `
+    <!-- Marketing Tab -->
+    ${vMarketingTab()}
+    `}
     ` : `
     <div class="alert alert-warn">No book generated yet. Go to Generate step first.</div>
     `}
 
     <div class="actions">
-      <button class="btn btn-ghost" onclick="go(5)">← Generate</button>
+      <button class="btn btn-ghost" onclick="go(4)">← Generate</button>
       <button class="btn btn-green" onclick="startNew()">New Book</button>
     </div>
   </div>`;
 }
 
+// Marketing Tab Content
+function vMarketingTab() {
+  const m = S.gen.marketingResult;
+  const loading = S.gen.marketingLoading;
+
+  if (loading) {
+    return `
+    <div class="card" style="text-align:center;padding:40px;">
+      <div class="spinner" style="width:32px;height:32px;margin:0 auto 16px;"></div>
+      <p style="color:var(--text);font-weight:500;">Analyzing your book...</p>
+      <p style="color:var(--dim);font-size:12px;margin-top:8px;">Generating keywords, categories, description, ads, and social content</p>
+    </div>`;
+  }
+
+  if (!m) {
+    return `
+    <div class="card" style="text-align:center;padding:40px;">
+      <h3 style="margin-bottom:12px;">📈 KDP Marketing Assistant</h3>
+      <p style="color:var(--dim);margin-bottom:20px;">
+        Get AI-powered marketing recommendations for your book:<br/>
+        Keywords, categories, optimized description, Amazon Ads, and social content.
+      </p>
+      <button class="btn btn-primary" onclick="runMarketingAnalysis()">
+        ✨ Analyze & Generate Marketing Plan
+      </button>
+    </div>`;
+  }
+
+  // Display marketing results
+  const listing = m.optimized_listing || {};
+  const keywords = listing.keywords || [];
+  const categories = listing.categories || [];
+  const description = listing.description || '';
+  const adCampaign = m.ad_campaign || {};
+  const socialPosts = m.social_posts || [];
+  const quickWins = m.quick_wins || [];
+
+  return `
+    <div class="card">
+      <h3>🔑 Optimized Keywords (7 for KDP)</h3>
+      <p class="hint" style="margin-bottom:12px;">Copy these keywords to your KDP listing</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+        ${keywords.map(kw => `<span class="tag" style="padding:6px 12px;font-size:12px;cursor:pointer;" onclick="copyToClipboard('${kw.replace(/'/g, "\\'")}')" title="Click to copy">${kw}</span>`).join('')}
+      </div>
+      <button class="btn btn-secondary" onclick="copyToClipboard('${keywords.join(', ').replace(/'/g, "\\'")}')">📋 Copy All Keywords</button>
+    </div>
+
+    <div class="card">
+      <h3>📂 Recommended Categories</h3>
+      ${categories.map(cat => `
+        <div style="padding:10px;background:var(--bg);border-radius:6px;margin-bottom:8px;">
+          <div style="font-weight:500;font-size:13px;">${cat.path || cat}</div>
+          ${cat.reasoning ? `<div style="font-size:11px;color:var(--dim);margin-top:4px;">${cat.reasoning}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card">
+      <h3>📝 Optimized Description</h3>
+      <p class="hint" style="margin-bottom:12px;">Copy this HTML-formatted description to KDP</p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:1.7;max-height:300px;overflow-y:auto;">
+        ${description}
+      </div>
+      <button class="btn btn-secondary" style="margin-top:12px;" onclick="copyToClipboard(S.gen.marketingResult?.optimized_listing?.description || '')">📋 Copy Description</button>
+    </div>
+
+    ${adCampaign.keywords?.length ? `
+    <div class="card">
+      <h3>💰 Amazon Ads Campaign Plan</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:var(--bg);padding:12px;border-radius:6px;">
+          <div style="font-size:11px;color:var(--dim);">Daily Budget</div>
+          <div style="font-size:18px;font-weight:600;color:var(--green);">$${adCampaign.daily_budget || '10'}</div>
+        </div>
+        <div style="background:var(--bg);padding:12px;border-radius:6px;">
+          <div style="font-size:11px;color:var(--dim);">Expected ACoS</div>
+          <div style="font-size:18px;font-weight:600;color:var(--yellow);">${adCampaign.expected_acos || 'Medium'}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--dim);margin-bottom:12px;">${adCampaign.targeting_strategy || ''}</div>
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <tr style="color:var(--dim);text-align:left;border-bottom:1px solid var(--border);">
+          <th style="padding:8px 0;">Keyword</th>
+          <th>Match</th>
+          <th>Bid</th>
+        </tr>
+        ${(adCampaign.keywords || []).map(kw => `
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:8px 0;">${kw.keyword}</td>
+            <td>${kw.match_type}</td>
+            <td>$${kw.suggested_bid?.toFixed(2) || '0.50'}</td>
+          </tr>
+        `).join('')}
+      </table>
+    </div>
+    ` : ''}
+
+    ${socialPosts.length ? `
+    <div class="card">
+      <h3>📱 Social Media Content</h3>
+      <div style="display:grid;gap:12px;">
+        ${socialPosts.map(post => `
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-weight:600;text-transform:capitalize;">${post.platform}</span>
+              <span style="font-size:10px;color:var(--dim);">${post.best_posting_time || ''}</span>
+            </div>
+            <div style="font-size:13px;line-height:1.6;margin-bottom:8px;">${post.content}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${(post.hashtags || []).map(h => `<span style="font-size:11px;color:var(--accent);">#${h}</span>`).join('')}
+            </div>
+            <button class="btn btn-ghost" style="margin-top:8px;font-size:11px;" onclick="copyToClipboard(\`${(post.content || '').replace(/`/g, '\\`')} ${(post.hashtags || []).map(h => '#' + h).join(' ')}\`)">📋 Copy</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    ${quickWins.length ? `
+    <div class="card">
+      <h3>⚡ Quick Wins Checklist</h3>
+      <p class="hint" style="margin-bottom:12px;">Immediate actions to boost your book's visibility</p>
+      <div style="display:grid;gap:8px;">
+        ${quickWins.map((win, i) => `
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:8px;background:var(--bg);border-radius:6px;">
+            <input type="checkbox" id="qw-${i}" style="margin-top:3px;"/>
+            <span style="font-size:13px;">${win}</span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+
+    <div class="card">
+      <button class="btn btn-secondary" onclick="runMarketingAnalysis()">
+        🔄 Regenerate Marketing Analysis
+      </button>
+    </div>
+  `;
+}
+
+// Run marketing analysis
+async function runMarketingAnalysis() {
+  if (!S.gen.bookId) {
+    alert('No book to analyze. Generate a book first.');
+    return;
+  }
+
+  S.gen.marketingLoading = true;
+  S.gen.outputTab = 'marketing';
+  render();
+
+  try {
+    const result = await api('/api/marketing/analyze', { book_id: S.gen.bookId });
+    if (result.ok) {
+      S.gen.marketingResult = result.result;
+      S.gen.log.push('Marketing analysis complete');
+    } else {
+      alert('Marketing analysis failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (e) {
+    alert('Server error: ' + e.message);
+  }
+
+  S.gen.marketingLoading = false;
+  render();
+}
+
+// Copy to clipboard helper
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // Show brief feedback
+    const btn = event?.target;
+    if (btn && btn.tagName === 'BUTTON') {
+      const original = btn.innerHTML;
+      btn.innerHTML = '✓ Copied!';
+      btn.style.color = 'var(--green)';
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.style.color = '';
+      }, 1500);
+    }
+  }).catch(err => {
+    console.error('Copy failed:', err);
+    alert('Copy failed. Please select and copy manually.');
+  });
+}
+
 function startNew() {
-  S.gen = {bookId:null,story:null,artProgress:null,stages:{story:'pending',art:'pending',pdf:'pending',publish:'pending'},log:[],generatedImages:[],editingScene:null};
-  S.research.selected = null;
+  S.gen = {bookId:null,story:null,artProgress:null,stages:{story:'pending',charsheet:'pending',illustrations:'pending',pdf:'pending',publish:'pending'},log:[],generatedImages:[],editingScene:null,characterSheet:null,charsheetApproved:false,outputTab:'files',marketingResult:null,marketingLoading:false};
   S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.setting=''; S.book.tone='whimsical'; S.book.notes='';
   go(1);
 }

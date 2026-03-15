@@ -1,11 +1,24 @@
 # Book Factory - Session Context & Next Steps
 
 > **Last Updated:** 2026-03-14
-> **Session ID:** session-20260314a
+> **Session ID:** session-20260314b
 
 ---
 
 ## Latest Changes (2026-03-14)
+
+### Removed Find Niche + Added KDP Marketing Agent
+Major pipeline refactor:
+- **Removed** Niche Researcher agent and "Find Niche" step (non-functional Amazon scraping)
+- **Added** KDP Marketing Agent (`agents/kdp_marketing.py`) for post-publish optimization
+- **Dashboard** now has 6 steps instead of 7 for Children's Book mode
+- **Marketing tab** added to Output step with:
+  - 7 optimized KDP keywords (copyable)
+  - 2-3 category suggestions with reasoning
+  - SEO-optimized HTML description
+  - Amazon Ads campaign plan (keywords, bids, budget)
+  - Social media posts for Instagram, Facebook, Pinterest, TikTok
+  - Quick wins checklist for immediate actions
 
 ### Dashboard Branding
 - Added **favicon** (open book icon) for browser tab
@@ -23,11 +36,11 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 
 | Agent | Status | Recent Activity | Critical Issues |
 |-------|--------|-----------------|-----------------|
-| Niche Researcher | READY | 11 niches ranked | Competition formula broken (all 0) |
 | Story Engine | PRODUCTION-READY | 25+ books generated | Word count slightly tight (289 vs 300) |
 | Art Pipeline | READY | 15 books with art | 3 recent books missing spreads in art_result.json |
 | PDF Builder | READY | 9 complete PDFs | 2 books have 15KB interior PDFs (too small) |
 | KDP Publisher | READY | Content tab automated | Selectors need live validation |
+| KDP Marketing | NEW | Just created | Needs end-to-end testing |
 
 **Books Ready for Publishing:**
 - Priscilla's Magical Forest Adventure - **COMPLETE** (Interior 22MB, Cover 56KB, Kindle 815KB)
@@ -40,30 +53,37 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 
 ## Agent Status Reports
 
-### Niche Researcher
-**Status:** READY (with caveats)
+### KDP Marketing Agent
+**Status:** NEW (2026-03-14)
 
 **Current Capabilities:**
-- Amazon category scanning (11 categories: dogs, foxes, bears, etc.)
-- Keyword research with auto-suggest expansion
-- Niche scoring and ranking by opportunity
-- Brief generation for each ranked niche
+- Keyword analysis with search volume/competition estimation (7 keywords for KDP)
+- Category suggestions with fit scoring and reasoning
+- SEO-optimized book description with HTML formatting
+- Title/subtitle optimization
+- Amazon Ads campaign planning (keywords, match types, bids, budget)
+- Social media content generation (Instagram, Facebook, Pinterest, TikTok)
+- Quick wins checklist for immediate marketing actions
+- Saves results to `marketing_result.json` in book directory
+
+**API Endpoints:**
+- `POST /api/marketing/analyze` - Full marketing analysis
+- `POST /api/marketing/keywords` - Quick keyword-only analysis
+
+**Dashboard Integration:**
+- Marketing tab in Output step
+- Copy buttons for keywords, description, social posts
+- Quick wins checklist with checkboxes
+- Regenerate button for re-running analysis
 
 **Configuration:**
-- min_bsr: 100000
-- max_competition_reviews: 50
-- Using fallback/mock data (live Amazon scraping blocked)
-
-**Issues:**
-- **CRITICAL:** Competition score formula broken - all niches score 0
-  - Formula: `100 - (avg_reviews * 2)` clamps negative to 0 with review counts 150-500
-- Config settings (focus_categories, thresholds) not actually applied by agent
-- Abstract niches use generic character names ("Dream Character" vs specific animal)
+- Model: claude-sonnet-4-20250514
+- Max retries: 3 with exponential backoff
 
 **Next Steps:**
-1. Fix competition score formula (suggest: scale differently for 50-500 review range)
-2. Connect config settings to agent logic
-3. Map abstract niches to specific animals
+1. End-to-end testing with real published book
+2. Validate keyword suggestions against Amazon search
+3. Consider adding competitor analysis feature
 
 ---
 
