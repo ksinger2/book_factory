@@ -809,6 +809,7 @@ function vGenerate() {
         const st = S.gen.stages[s.key];
         const prog = S.gen.artProgress;
         const showProgress = s.key === 'illustrations' && st === 'running' && prog;
+        const awaitingApproval = S.gen.awaitingApproval && s.key === 'illustrations' && st === 'running';
 
         // Determine if button should be disabled
         let btnDisabled = false;
@@ -830,6 +831,24 @@ function vGenerate() {
                 </div>
                 <div class="meter-track">
                   <div class="meter-fill demand" style="width:${Math.round((prog.current/prog.total)*100)}%;transition:width 0.3s;"></div>
+                </div>
+              </div>
+            ` : ''}
+            ${awaitingApproval ? `
+              <div style="margin-top:12px;padding:10px;background:var(--surface-hover);border-radius:6px;border:1px solid var(--yellow);">
+                <div style="font-size:12px;color:var(--yellow);margin-bottom:8px;font-weight:600;">
+                  ⏸ Debug Mode: Awaiting Approval
+                </div>
+                <div style="font-size:11px;color:var(--dim);margin-bottom:8px;">
+                  Review the ${S.gen.awaitingApproval.imageType} image below. Click Approve to continue or Regenerate to fix issues.
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <button class="btn btn-primary" onclick="approveDebugImage()">
+                    ✓ Approve & Continue
+                  </button>
+                  <button class="btn btn-secondary" onclick="showRegenModal('${S.gen.awaitingApproval.imageType}', ${S.gen.awaitingApproval.index})">
+                    ⟳ Regenerate
+                  </button>
                 </div>
               </div>
             ` : ''}
@@ -1167,13 +1186,30 @@ async function runStage(stage, extraParams = {}) {
                       }
                     }
 
+                    // Debug mode: track awaiting approval state
+                    if (data.stage === 'awaiting_approval') {
+                      S.gen.awaitingApproval = {
+                        imageType: data.image_type,
+                        index: data.index || 0,
+                        imagePath: data.image_path
+                      };
+                    } else if (data.stage === 'approved' || data.stage === 'generating') {
+                      S.gen.awaitingApproval = null;
+                    }
+
                     render();
 
                     if (data.stage === 'error') {
                       reject(new Error(data.message));
                       return;
                     }
+                    if (data.stage === 'cancelled') {
+                      S.gen.awaitingApproval = null;
+                      reject(new Error('Generation cancelled'));
+                      return;
+                    }
                     if (data.stage === 'complete') {
+                      S.gen.awaitingApproval = null;
                       S.gen.stages.illustrations = 'done';
                       resolve();
                       return;
@@ -1374,6 +1410,25 @@ async function saveSceneText(sceneIndex) {
     S.gen.log.push(`[${new Date().toLocaleTimeString()}] ERROR saving scene: ${e.message}`);
   }
   render();
+}
+
+// ─── Debug Mode Image Approval ───
+async function approveDebugImage() {
+  if (!S.gen.awaitingApproval) return;
+
+  const { imageType, index } = S.gen.awaitingApproval;
+  try {
+    const r = await api('/api/approve-image', {
+      book_id: S.gen.bookId,
+      image_type: imageType,
+      index: index
+    });
+    if (!r.ok) {
+      alert('Failed to approve: ' + r.error);
+    }
+  } catch (e) {
+    alert('Error approving image: ' + e.message);
+  }
 }
 
 // ─── Image Regeneration ───
@@ -1869,7 +1924,7 @@ function copyToClipboard(text) {
 }
 
 function startNew() {
-  S.gen = {bookId:null,story:null,artProgress:null,stages:{story:'pending',charsheet:'pending',illustrations:'pending',pdf:'pending',publish:'pending'},log:[],generatedImages:[],editingScene:null,characterSheet:null,charsheetApproved:false,outputTab:'files',marketingResult:null,marketingLoading:false};
+  S.gen = {bookId:null,story:null,artProgress:null,stages:{story:'pending',charsheet:'pending',illustrations:'pending',pdf:'pending',publish:'pending'},log:[],generatedImages:[],editingScene:null,characterSheet:null,charsheetApproved:false,outputTab:'files',marketingResult:null,marketingLoading:false,awaitingApproval:null};
   S.book.category=''; S.book.animal=''; S.book.theme=''; S.book.lesson=''; S.book.setting=''; S.book.tone='whimsical'; S.book.notes='';
   go(1);
 }
@@ -2356,7 +2411,26 @@ function vColoringPages() {
         </div>
       ` : ''}
 
-      <div style="display:flex;gap:10px;">
+      ${S.coloring.awaitingApproval ? `
+        <div style="margin-top:12px;padding:10px;background:var(--surface-hover);border-radius:6px;border:1px solid var(--yellow);">
+          <div style="font-size:12px;color:var(--yellow);margin-bottom:8px;font-weight:600;">
+            ⏸ Debug Mode: Awaiting Approval
+          </div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:8px;">
+            Review page ${S.coloring.awaitingApproval.index} below. Click Approve to continue or Regenerate to fix issues.
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="approveColoringDebugImage()">
+              ✓ Approve & Continue
+            </button>
+            <button class="btn btn-secondary" onclick="regenerateColoringPage(${S.coloring.awaitingApproval.index})">
+              ⟳ Regenerate
+            </button>
+          </div>
+        </div>
+      ` : ''}
+
+      <div style="display:flex;gap:10px;margin-top:12px;">
         ${!isRunning && pages.length === 0 ? `
           <button class="btn btn-primary" onclick="generateColoringPages()">Generate All Pages</button>
         ` : ''}
@@ -2456,13 +2530,26 @@ async function generateColoringPages() {
               }, 300);
             }
 
+            // Debug mode: track awaiting approval state for coloring pages
+            if (data.stage === 'awaiting_approval') {
+              S.coloring.awaitingApproval = {
+                imageType: data.image_type,
+                index: data.index || data.current,
+                imagePath: data.image_path
+              };
+            } else if (data.stage === 'approved' || data.stage === 'generating') {
+              S.coloring.awaitingApproval = null;
+            }
+
             if (data.stage === 'complete') {
               S.coloring.stages.pages = 'done';
+              S.coloring.awaitingApproval = null;
             }
 
             if (data.stage === 'cancelled') {
               S.coloring.stages.pages = 'pending';
               S.coloring.progress = null;
+              S.coloring.awaitingApproval = null;
               S.coloring.log.push(`[${new Date().toLocaleTimeString()}] ⚠️ Generation cancelled - no further pages will be generated`);
             }
 
@@ -2492,7 +2579,26 @@ async function cancelColoringPages() {
   }
   S.coloring.stages.pages = 'pending';
   S.coloring.progress = null;
+  S.coloring.awaitingApproval = null;
   render();
+}
+
+async function approveColoringDebugImage() {
+  if (!S.coloring.awaitingApproval) return;
+
+  const { imageType, index } = S.coloring.awaitingApproval;
+  try {
+    const r = await api('/api/approve-image', {
+      book_id: S.coloring.bookId,
+      image_type: imageType,
+      index: index
+    });
+    if (!r.ok) {
+      alert('Failed to approve: ' + r.error);
+    }
+  } catch (e) {
+    alert('Error approving image: ' + e.message);
+  }
 }
 
 function regenerateColoringPage(pageNum) {
@@ -3045,7 +3151,8 @@ function startNewColoringBook() {
     cover: null, backCover: null,
     stages: {brief:'pending', reference:'pending', pages:'pending', cover:'pending', pdf:'pending', publish:'pending'},
     progress: null, log: [],
-    marketingResult: null, marketingLoading: false, publishTab: 'publish'
+    marketingResult: null, marketingLoading: false, publishTab: 'publish',
+    awaitingApproval: null  // Debug mode approval tracking
   };
   go(1);
 }

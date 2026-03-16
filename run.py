@@ -635,6 +635,38 @@ def api_charsheet_approve():
     return jsonify({"ok": True, "message": "Character sheet approved"})
 
 
+@app.route('/api/approve-image', methods=['POST'])
+def api_approve_image():
+    """Approve an image in debug mode to continue generation to the next image."""
+    data = request.json
+    book_id = data.get("book_id")
+    image_type = data.get("image_type", "spread")  # 'cover', 'spread', or 'page'
+    index = data.get("index", 1)  # For spreads/pages, which number
+
+    if not book_id:
+        return jsonify({"ok": False, "error": "No book_id provided"}), 400
+
+    book_dir = OUTPUT_DIR / book_id
+    if not book_dir.exists():
+        return jsonify({"ok": False, "error": "Book not found"}), 404
+
+    # Determine approval marker filename based on image type
+    if image_type == 'cover':
+        approval_marker = book_dir / ".cover_approved"
+    elif image_type == 'spread':
+        approval_marker = book_dir / f".spread_{index:02d}_approved"
+    elif image_type == 'page':
+        approval_marker = book_dir / f".page_{index:02d}_approved"
+    else:
+        return jsonify({"ok": False, "error": f"Unknown image_type: {image_type}"}), 400
+
+    # Create approval marker
+    approval_marker.touch()
+
+    log.info(f"Image approved in debug mode: {book_id}/{image_type}/{index}")
+    return jsonify({"ok": True, "message": f"{image_type.capitalize()} {index} approved"})
+
+
 @app.route('/api/illustrations', methods=['POST'])
 def api_illustrations():
     """Generate illustrations (cover + spreads) with SSE progress. Requires approved character sheet."""
@@ -642,6 +674,10 @@ def api_illustrations():
     book_id = data.get("book_id")
     if not book_id:
         return jsonify({"ok": False, "error": "No book_id provided"}), 400
+
+    # Check for debug mode from config or request
+    cfg = load_config()
+    debug_mode = data.get("debug_mode", cfg.get('art', {}).get('debug_mode', False))
 
     # Clear any previous cancellation
     cancelled_jobs.discard(book_id)
@@ -770,7 +806,23 @@ def api_illustrations():
                         style=art_style
                     )
                     art_result["cover"] = str(cpath)
-                    yield f"data: {json.dumps({'stage': 'image_done', 'current': current, 'total': total_images, 'message': 'Cover complete!', 'image_path': 'cover.png', 'image_type': 'cover'})}\n\n"
+                    yield f"data: {json.dumps({'stage': 'image_done', 'current': current, 'total': total_images, 'message': 'Cover complete!', 'image_path': 'cover.png', 'image_type': 'cover', 'debug_mode': debug_mode})}\n\n"
+
+                    # Debug mode: wait for approval before continuing
+                    if debug_mode:
+                        approval_file = book_dir / ".cover_approved"
+                        # Remove any existing approval marker
+                        if approval_file.exists():
+                            approval_file.unlink()
+                        yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': current, 'total': total_images, 'message': 'Cover ready - waiting for approval...', 'image_type': 'cover', 'image_path': 'cover.png'})}\n\n"
+                        while not approval_file.exists():
+                            if book_id in cancelled_jobs:
+                                yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
+                                cancelled_jobs.discard(book_id)
+                                return
+                            time.sleep(0.5)
+                        yield f"data: {json.dumps({'stage': 'approved', 'current': current, 'total': total_images, 'message': 'Cover approved! Continuing...', 'image_type': 'cover'})}\n\n"
+
                 except Exception as e:
                     yield f"data: {json.dumps({'stage': 'image_error', 'current': current, 'total': total_images, 'message': f'Cover failed: {str(e)}'})}\n\n"
 
@@ -814,7 +866,23 @@ Page Text (the verse for this illustration):
                         style=art_style
                     )
                     art_result["spreads"].append(str(spath))
-                    yield f"data: {json.dumps({'stage': 'image_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!', 'image_path': f'scene_{i+1:02d}.png', 'image_type': 'spread', 'index': i+1})}\n\n"
+                    yield f"data: {json.dumps({'stage': 'image_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!', 'image_path': f'scene_{i+1:02d}.png', 'image_type': 'spread', 'index': i+1, 'debug_mode': debug_mode})}\n\n"
+
+                    # Debug mode: wait for approval before generating next spread
+                    if debug_mode:
+                        approval_file = book_dir / f".spread_{i+1:02d}_approved"
+                        # Remove any existing approval marker
+                        if approval_file.exists():
+                            approval_file.unlink()
+                        yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': current, 'total': total_images, 'message': f'Spread {i+1} ready - waiting for approval...', 'image_type': 'spread', 'image_path': f'scene_{i+1:02d}.png', 'index': i+1})}\n\n"
+                        while not approval_file.exists():
+                            if book_id in cancelled_jobs:
+                                yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
+                                cancelled_jobs.discard(book_id)
+                                return
+                            time.sleep(0.5)
+                        yield f"data: {json.dumps({'stage': 'approved', 'current': current, 'total': total_images, 'message': f'Spread {i+1} approved! Continuing...', 'image_type': 'spread', 'index': i+1})}\n\n"
+
                 except Exception as e:
                     yield f"data: {json.dumps({'stage': 'image_error', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} failed: {str(e)}'})}\n\n"
 
@@ -941,8 +1009,23 @@ def api_regenerate_image():
                     extra_refs.append(local_path)
                     log.info(f"Added additional reference: {local_path}")
 
-        # Initialize pipeline
+        # Load art_result.json to get character_visual_guide
+        art_result_path = art_dir / 'art_result.json'
+        character_visual_guide = None
+        if art_result_path.exists():
+            try:
+                with open(art_result_path) as f:
+                    art_result = json.load(f)
+                    character_visual_guide = art_result.get('character_visual_guide', '')
+                    if character_visual_guide:
+                        log.info(f"Loaded character visual guide for regeneration: {character_visual_guide[:100]}...")
+            except Exception as e:
+                log.warning(f"Could not load art_result.json: {e}")
+
+        # Initialize pipeline with character visual guide
         pipeline = ArtPipeline(style=art_style, hard_rules=hard_rules)
+        if character_visual_guide:
+            pipeline.character_visual_guide = character_visual_guide
 
         if image_type == 'spread':
             if scene_index < 1 or scene_index > len(scenes):
@@ -981,7 +1064,10 @@ def api_regenerate_image():
                     "image_path": f"scene_{scene_index:02d}.png"
                 })
             else:
-                return jsonify({"ok": False, "error": result}), 500
+                error_msg = result
+                if 'moderation' in error_msg.lower() or 'content_policy' in error_msg.lower():
+                    error_msg = "Content moderation blocked this image. Try adjusting your feedback text to avoid trigger words, or modify the scene description."
+                return jsonify({"ok": False, "error": error_msg}), 500
 
         elif image_type == 'cover':
             cover_scene = scenes[0].get('illustration_prompt', '') if scenes else ''
@@ -1388,6 +1474,10 @@ def api_coloring_pages():
     if not book_id:
         return jsonify({"ok": False, "error": "No book_id provided"}), 400
 
+    # Check for debug mode from config or request
+    cfg = load_config()
+    debug_mode = data.get("debug_mode", cfg.get('coloring', {}).get('debug_mode', False))
+
     # Clear any previous cancellation for this book (allows retry after cancel)
     cancelled_jobs.discard(book_id)
 
@@ -1516,7 +1606,23 @@ def api_coloring_pages():
                             "qa_passed": True,
                             "qa_scores": qa_result.scores
                         })
-                        yield f"data: {json.dumps({'stage': 'page_done', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} complete!', 'image_path': f'pages/page_{page_num:02d}.png', 'qa_passed': True})}\n\n"
+                        yield f"data: {json.dumps({'stage': 'page_done', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} complete!', 'image_path': f'pages/page_{page_num:02d}.png', 'qa_passed': True, 'debug_mode': debug_mode})}\n\n"
+
+                        # Debug mode: wait for approval before generating next page
+                        if debug_mode:
+                            approval_file = book_dir / f".page_{page_num:02d}_approved"
+                            # Remove any existing approval marker
+                            if approval_file.exists():
+                                approval_file.unlink()
+                            yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} ready - waiting for approval...', 'image_type': 'page', 'image_path': f'pages/page_{page_num:02d}.png', 'index': page_num})}\n\n"
+                            while not approval_file.exists():
+                                if book_id in cancelled_jobs:
+                                    yield f"data: {json.dumps({'stage': 'cancelled', 'current': page_num, 'total': num_pages, 'message': 'Generation cancelled by user'})}\n\n"
+                                    cancelled_jobs.discard(book_id)
+                                    return
+                                time.sleep(0.5)
+                            yield f"data: {json.dumps({'stage': 'approved', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} approved! Continuing...', 'image_type': 'page', 'index': page_num})}\n\n"
+
                         break
                     else:
                         yield f"data: {json.dumps({'stage': 'qa_retry', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} QA failed, retrying ({attempt + 1}/{max_attempts})...'})}\n\n"

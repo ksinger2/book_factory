@@ -1,11 +1,38 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-15
-> **Session ID:** session-20260315a
+> **Last Updated:** 2026-03-16
+> **Session ID:** session-20260316a
 
 ---
 
-## Latest Changes (2026-03-15)
+## Latest Changes (2026-03-16)
+
+### Image Regeneration Fixes
+- **Character visual guide** now loaded from `art_result.json` when regenerating images
+  - Fixes "NO character visual guide available" warning in logs
+  - Ensures character DNA is preserved during regeneration
+- **Moderation error handling** added to art pipeline
+  - Catches OpenAI `BadRequestError` for moderation/safety/content_policy blocks
+  - Sanitizes prompt automatically and retries (replaces trigger words)
+  - New `_sanitize_prompt_for_moderation()` method handles false positives
+  - Helpful error message shown in dashboard if all retries fail
+- **Improved error messages** for moderation blocks in dashboard
+
+### Debug Mode for Step-by-Step Image Approval
+New configuration option to pause after each image and wait for user approval:
+- **Config options** added to `studio_config.yaml`:
+  - `art.debug_mode: true/false` - For children's book illustrations
+  - `coloring.debug_mode: true/false` - For coloring book pages
+- **New API endpoint** `/api/approve-image` to continue generation
+- **Dashboard UI** shows approval panel when in debug mode:
+  - Yellow-bordered panel with "Approve & Continue" and "Regenerate" buttons
+  - Appears after each image (cover, spreads, or pages)
+  - Pipeline pauses until user approves or regenerates
+- Works for both **Children's Books** and **Coloring Books**
+
+---
+
+## Previous Changes (2026-03-15)
 
 ### Story Regeneration with Additive Prompt
 - **Modal dialog** replaces confirm() when clicking "Regenerate Story"
@@ -133,7 +160,7 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 ---
 
 ### Art Pipeline
-**Status:** READY - Cost optimized
+**Status:** READY - Cost optimized + Debug mode
 
 **Current Capabilities:**
 - Character sheet generation (4-panel reference)
@@ -141,22 +168,30 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 - Character DNA extraction via GPT-4o vision
 - Vision-based QA (gpt-4o-mini for cost savings)
 - Recurring character detection
+- **Moderation error handling** with automatic prompt sanitization
+- **Debug mode** for step-by-step image approval
 
 **Configuration:**
 - Image model: gpt-image-1
 - Image quality: medium (50% cost savings)
 - QA: first image only (qa_first_only=True)
 - Max retries: 3
+- **debug_mode: false** (set to true for step-by-step approval)
 
 **Recent Activity:**
 - 15 books with art_result.json files
 - Thomass New Friend: Complete (13 files, 38MB)
 - Cost reduced 75-85% from previous settings
+- 2026-03-16: Added moderation error handling and debug mode
 
 **Issues:**
 - 3 recent books have empty spreads arrays in art_result.json
 - Eye highlight consistency sometimes requires retries
 - Character sheet naming inconsistent (space before underscore in some)
+
+**Resolved:**
+- ~~Character visual guide not loaded during regeneration~~ (Fixed 2026-03-16)
+- ~~Moderation false positives causing repeated failures~~ (Fixed 2026-03-16)
 
 **Next Steps:**
 1. Fix incomplete art_result.json files for Panda Pippin, Thomas variants

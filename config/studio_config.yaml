@@ -1,5 +1,5 @@
 kdp:
-  use_chrome_profile: true
+  use_chrome_profile: false
   chrome_profile_name: Profile 2
 defaults:
   trim_size: 8.5x8.5
@@ -20,6 +20,7 @@ art:
   quality: medium
   retries: 3
   qa_enabled: true
+  debug_mode: false  # If true, pause after each image and wait for user approval
 research:
   min_bsr: 100000
   max_competition_reviews: 50
@@ -36,6 +37,7 @@ pipeline:
   skip_publish: false
   auto_upload_art: false
 coloring:
+  debug_mode: false  # If true, pause after each page and wait for user approval
   defaults:
     age_level: adult
     difficulty: medium
