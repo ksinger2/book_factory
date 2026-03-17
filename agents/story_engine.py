@@ -118,6 +118,95 @@ class StoryEngine:
                 else:
                     raise ValueError(f"API error after {self.max_retries} attempts: {e}")
 
+    def _repair_json(self, text: str) -> str:
+        """
+        Attempt to repair common JSON issues from LLM output.
+
+        Args:
+            text: Potentially malformed JSON string
+
+        Returns:
+            Repaired JSON string
+        """
+        # Remove any leading/trailing whitespace
+        text = text.strip()
+
+        # Remove markdown code block markers if present
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*', '', text)
+            text = re.sub(r'\s*```$', '', text)
+
+        # Fix trailing commas before closing brackets/braces
+        text = re.sub(r',(\s*[}\]])', r'\1', text)
+
+        # Fix missing commas between objects in arrays ("}{ -> "},{")
+        text = re.sub(r'\}(\s*)\{', r'},\1{', text)
+
+        # Fix unescaped newlines inside strings (replace with \n)
+        # This is tricky - we need to be careful not to break valid JSON
+        # Only fix obvious cases where there's a newline between quotes
+        lines = text.split('\n')
+        fixed_lines = []
+        in_string = False
+        for line in lines:
+            # Count unescaped quotes to track if we're in a string
+            quote_count = len(re.findall(r'(?<!\\)"', line))
+            if in_string:
+                # We're continuing a string from the previous line
+                fixed_lines[-1] = fixed_lines[-1] + '\\n' + line
+            else:
+                fixed_lines.append(line)
+            # Toggle in_string if odd number of quotes
+            if quote_count % 2 == 1:
+                in_string = not in_string
+
+        text = '\n'.join(fixed_lines)
+
+        return text
+
+    def _parse_json_response(self, response: str, context: str = "response") -> Dict[str, Any]:
+        """
+        Parse JSON from LLM response with repair attempts.
+
+        Args:
+            response: Raw LLM response text
+            context: Description for error messages
+
+        Returns:
+            Parsed JSON as dict
+
+        Raises:
+            ValueError: If JSON cannot be parsed after repairs
+        """
+        # First try direct parse
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            pass
+
+        # Try extracting from markdown code blocks
+        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                # Try repairing the extracted JSON
+                repaired = self._repair_json(json_match.group(1))
+                try:
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    pass
+
+        # Try repairing the full response
+        repaired = self._repair_json(response)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError as e:
+            # Log the problematic response for debugging
+            print(f"JSON parse error in {context}: {e}")
+            print(f"Response preview: {response[:500]}...")
+            raise ValueError(f"Failed to parse {context} JSON: {e}")
+
     def generate_story(self, brief: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate a complete children's story with 12 scenes.
@@ -354,16 +443,8 @@ FINAL REMINDER: Before outputting, carefully review ALL text for:
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=4096)
 
-        # Extract JSON from response
-        try:
-            story_data = json.loads(response)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
-            if json_match:
-                story_data = json.loads(json_match.group(1))
-            else:
-                raise ValueError(f"Failed to parse story JSON response: {response[:200]}")
+        # Parse JSON with repair attempts
+        story_data = self._parse_json_response(response, "story")
 
         return story_data
 
@@ -409,14 +490,7 @@ Return as JSON:
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=2048)
 
-        try:
-            character_data = json.loads(response)
-        except json.JSONDecodeError:
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
-            if json_match:
-                character_data = json.loads(json_match.group(1))
-            else:
-                raise ValueError(f"Failed to parse character JSON: {response[:200]}")
+        character_data = self._parse_json_response(response, "character")
 
         return character_data
 
@@ -493,14 +567,7 @@ Return as JSON:
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=2048)
 
-        try:
-            character_data = json.loads(response)
-        except json.JSONDecodeError:
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
-            if json_match:
-                character_data = json.loads(json_match.group(1))
-            else:
-                raise ValueError(f"Failed to parse character JSON: {response[:200]}")
+        character_data = self._parse_json_response(response, "character_from_story")
 
         return character_data
 
@@ -587,14 +654,7 @@ Return as JSON:
 
         response = self._call_api(system_prompt, user_prompt, max_tokens=2048)
 
-        try:
-            listing_data = json.loads(response)
-        except json.JSONDecodeError:
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response)
-            if json_match:
-                listing_data = json.loads(json_match.group(1))
-            else:
-                raise ValueError(f"Failed to parse listing JSON: {response[:200]}")
+        listing_data = self._parse_json_response(response, "listing")
 
         return listing_data
 
