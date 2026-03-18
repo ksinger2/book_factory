@@ -7,24 +7,28 @@
 
 ## Latest Changes (2026-03-18)
 
-### Bug Fixes (2026-03-18)
+### Bug Fixes — Story Generation (QA verified, live tested)
 
-#### Fix: JSON Parse Failures in Story Engine
-**Problem:** `Failed to parse listing JSON: Expecting ',' delimiter` — long GPT description fields with unescaped chars broke JSON parsing. Fallback only tried code fences, leaving raw malformed JSON unhandled.
-**Solution:**
-- Remote already had `_repair_json` + `_parse_json_response` with comprehensive repair logic
-- Capitalization rules updated in both rhyming and prose system prompts
-- `resources/grammar_guide.txt` updated with "CRITICAL - VERSE LINES vs SENTENCES" section
+#### Fix 1: Listing JSON parse crash (root cause found)
+**Problem:** `Failed to parse listing JSON: Expecting ',' delimiter` — listing prompt with 6 scene summaries was hitting the 2048 token cap and GPT was truncating the JSON mid-stream. No amount of repair logic can fix a truncated response.
+**Solution:** Increased listing `max_tokens` from 2048 → 3072.
 
-#### Fix: Incorrect Capitalization in Generated Verse
-**Problem:** GPT was capitalizing the first word of every verse line because it treated each element of the `"text": [...]` JSON array as a new sentence start.
-**Solution:**
-- Updated CAPITALIZATION rules in both rhyming and prose system prompts with explicit verse line vs sentence distinction, with WRONG/CORRECT array examples
-- Updated `resources/grammar_guide.txt` with annotated examples
+#### Fix 2: JSON repair fallback hardening
+**Solution:** Added `json-repair` library as 4th-stage fallback in `_parse_json_response` (handles unescaped quotes in description strings). Added to `requirements.txt`.
+
+#### Fix 3: Capitalization — standard English rules
+**Problem:** Overcomplicated verse-line rules caused GPT to either capitalize every line OR make everything lowercase.
+**Solution:** Replaced with plain standard English: sentence starts + proper nouns capitalized, everything else lowercase. Applied to both rhyming and prose system prompts and `grammar_guide.txt`.
+
+**QA Results (2026-03-18):**
+- 9/9 unit tests passing
+- 23/24 E2E tests passing (1 UI scene-edit gap, unrelated to story generation)
+- Live story generation test: `ok: true`, 12 scenes, listing parsed (1134 chars), capitalization correct
 
 **Files Modified:**
-- `agents/story_engine.py` — capitalization rules in both rhyming + prose system prompts
-- `resources/grammar_guide.txt` — verse capitalization rules and examples
+- `agents/story_engine.py` — listing max_tokens 2048→3072, json-repair fallback, capitalization rules
+- `resources/grammar_guide.txt` — simplified capitalization rules
+- `requirements.txt` — added json-repair
 
 ---
 
