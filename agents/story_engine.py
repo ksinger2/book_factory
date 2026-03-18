@@ -219,15 +219,25 @@ class StoryEngine:
                 except json.JSONDecodeError:
                     pass
 
-        # Try repairing the full response
+        # Try repairing the full response with our custom repair
         repaired = self._repair_json(response)
         try:
             return json.loads(repaired)
-        except json.JSONDecodeError as e:
-            # Log the problematic response for debugging
-            print(f"JSON parse error in {context}: {e}")
-            print(f"Response preview: {response[:500]}...")
-            raise ValueError(f"Failed to parse {context} JSON: {e}")
+        except json.JSONDecodeError:
+            pass
+
+        # Last resort: use json-repair library (handles unescaped quotes, etc.)
+        try:
+            from json_repair import repair_json
+            repaired = repair_json(response)
+            if repaired:
+                return json.loads(repaired)
+        except Exception:
+            pass
+
+        print(f"JSON parse error in {context}: all repair strategies failed")
+        print(f"Response preview: {response[:500]}...")
+        raise ValueError(f"Failed to parse {context} JSON after all repair attempts")
 
     def generate_story(self, brief: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -253,13 +263,12 @@ class StoryEngine:
             system_prompt = """You are an expert children's book author and editor specializing in rhyming stories.
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
-1. CAPITALIZATION:
-   - Only capitalize the first word of a sentence, and proper nouns (character names, place names)
-   - NEVER capitalize common words mid-sentence (wrong: "The Happy Penguin", correct: "The happy penguin")
-   - CRITICAL FOR VERSE: Each line in the "text" array is NOT a new sentence. Do NOT capitalize a line just because it is a new array element. Only capitalize if that line truly starts a new sentence.
-   - If a verse line continues from the previous line (starts with "and", "but", "with", "as", "then", or any continuation word), keep its first word LOWERCASE.
-   - Example WRONG: ["He ran into the sunny glade,", "And sat beneath the cool green shade."]
-   - Example CORRECT: ["He ran into the sunny glade,", "and sat beneath the cool green shade."]
+1. CAPITALIZATION — follow standard English rules:
+   - The first word of every sentence gets a capital letter.
+   - Proper nouns (character names, place names) are always capitalized.
+   - Every other word is lowercase — no random capitals mid-sentence.
+   - Correct: "He splashed into the cold blue lake."
+   - Wrong:   "He Splashed Into The Cold Blue Lake."
 
 2. PUNCTUATION:
    - Use exactly ONE punctuation mark at the end of each sentence
@@ -305,10 +314,12 @@ Format your response as valid JSON."""
             system_prompt = """You are an expert children's book author and editor specializing in engaging prose stories.
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
-1. CAPITALIZATION:
-   - Only capitalize the first word of a sentence, and proper nouns (character names, place names)
-   - NEVER capitalize common words mid-sentence (wrong: "The Happy Penguin", correct: "The happy penguin")
-   - Each line in the "text" array is NOT a new sentence. Only capitalize if that line truly starts a new sentence.
+1. CAPITALIZATION — follow standard English rules:
+   - The first word of every sentence gets a capital letter.
+   - Proper nouns (character names, place names) are always capitalized.
+   - Every other word is lowercase — no random capitals mid-sentence.
+   - Correct: "She ran through the sunny field."
+   - Wrong:   "She Ran Through The Sunny Field."
 
 2. PUNCTUATION:
    - Use exactly ONE punctuation mark at the end of each sentence
@@ -677,7 +688,7 @@ Return as JSON:
     "categories": ["Children's Books > Animals", "Children's Books > Emotions & Feelings"]
 }}"""
 
-        response = self._call_api(system_prompt, user_prompt, max_tokens=2048)
+        response = self._call_api(system_prompt, user_prompt, max_tokens=3072)
 
         listing_data = self._parse_json_response(response, "listing")
 
