@@ -1,13 +1,30 @@
 CHILDREN'S BOOK GRAMMAR QUICK REFERENCE
 
 CAPITALIZATION RULES:
-- First word of every sentence: Capitalize
+- First word of a sentence: Capitalize
 - Character names (Priscilla, Oliver, Penny): Capitalize
 - Place names (Antarctica, The Big Lake, Snowy Mountain): Capitalize
 - Common nouns (penguin, snow, fish, water): lowercase
 - Adjectives (happy, cold, bright, fluffy): lowercase
 - Verbs (waddles, swims, plays, jumps): lowercase
 - Articles (the, a, an): lowercase (unless starting sentence)
+
+CRITICAL - VERSE LINES vs SENTENCES:
+Each line in the "text" array is NOT automatically a new sentence.
+Capitalize ONLY if the line genuinely begins a new sentence.
+If a line continues a thought from the previous line (starts with "and", "but", "with", "as", "then", etc.), do NOT capitalize its first word.
+
+CORRECT verse example (2-line sentence spanning 2 lines):
+  "He jumped across the sparkling stream,"
+  "and caught a little sunbeam's gleam."   ← "and" is lowercase, it continues the sentence
+
+WRONG verse example (capitalizing every line):
+  "He jumped across the sparkling stream,"
+  "And caught a little sunbeam's gleam."   ← WRONG: "And" should be lowercase
+
+CORRECT verse example (two separate sentences, each on its own line):
+  "He splashed into the cold blue lake."
+  "The water shimmered like a flake."      ← "The" is capitalized — new sentence
 
 PUNCTUATION RULES:
 - Period (.): End of statement - use ONE only
@@ -22,6 +39,7 @@ COMMON ERRORS TO AVOID:
 - "What a day!!" → "What a day!"
 - "In The Cold Snow" → "In the cold snow"
 - "He Was So Very Happy" → "He was so very happy"
+- Capitalizing the first word of every verse line → WRONG. Follow sentence boundaries only.
 
 RHYMING QUALITY:
 - True rhymes: cat/hat, day/play, night/bright

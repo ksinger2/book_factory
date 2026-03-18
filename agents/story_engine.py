@@ -254,9 +254,12 @@ class StoryEngine:
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
 1. CAPITALIZATION:
-   - Only capitalize the first word of sentences
-   - Only capitalize proper nouns (character names, place names)
+   - Only capitalize the first word of a sentence, and proper nouns (character names, place names)
    - NEVER capitalize common words mid-sentence (wrong: "The Happy Penguin", correct: "The happy penguin")
+   - CRITICAL FOR VERSE: Each line in the "text" array is NOT a new sentence. Do NOT capitalize a line just because it is a new array element. Only capitalize if that line truly starts a new sentence.
+   - If a verse line continues from the previous line (starts with "and", "but", "with", "as", "then", or any continuation word), keep its first word LOWERCASE.
+   - Example WRONG: ["He ran into the sunny glade,", "And sat beneath the cool green shade."]
+   - Example CORRECT: ["He ran into the sunny glade,", "and sat beneath the cool green shade."]
 
 2. PUNCTUATION:
    - Use exactly ONE punctuation mark at the end of each sentence
@@ -303,9 +306,9 @@ Format your response as valid JSON."""
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
 1. CAPITALIZATION:
-   - Only capitalize the first word of sentences
-   - Only capitalize proper nouns (character names, place names)
+   - Only capitalize the first word of a sentence, and proper nouns (character names, place names)
    - NEVER capitalize common words mid-sentence (wrong: "The Happy Penguin", correct: "The happy penguin")
+   - Each line in the "text" array is NOT a new sentence. Only capitalize if that line truly starts a new sentence.
 
 2. PUNCTUATION:
    - Use exactly ONE punctuation mark at the end of each sentence

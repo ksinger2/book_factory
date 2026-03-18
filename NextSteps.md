@@ -1,11 +1,34 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-17
-> **Session ID:** session-20260317a
+> **Last Updated:** 2026-03-18
+> **Session ID:** session-20260318a
 
 ---
 
-## Latest Changes (2026-03-17)
+## Latest Changes (2026-03-18)
+
+### Bug Fixes (2026-03-18)
+
+#### Fix: JSON Parse Failures in Story Engine
+**Problem:** `Failed to parse listing JSON: Expecting ',' delimiter` — long GPT description fields with unescaped chars broke JSON parsing. Fallback only tried code fences, leaving raw malformed JSON unhandled.
+**Solution:**
+- Remote already had `_repair_json` + `_parse_json_response` with comprehensive repair logic
+- Capitalization rules updated in both rhyming and prose system prompts
+- `resources/grammar_guide.txt` updated with "CRITICAL - VERSE LINES vs SENTENCES" section
+
+#### Fix: Incorrect Capitalization in Generated Verse
+**Problem:** GPT was capitalizing the first word of every verse line because it treated each element of the `"text": [...]` JSON array as a new sentence start.
+**Solution:**
+- Updated CAPITALIZATION rules in both rhyming and prose system prompts with explicit verse line vs sentence distinction, with WRONG/CORRECT array examples
+- Updated `resources/grammar_guide.txt` with annotated examples
+
+**Files Modified:**
+- `agents/story_engine.py` — capitalization rules in both rhyming + prose system prompts
+- `resources/grammar_guide.txt` — verse capitalization rules and examples
+
+---
+
+## Previous Changes (2026-03-17)
 
 ### Debug/Cost-Saving Mode for Testing
 Added global debug mode to reduce API costs by ~80% during development and testing:
