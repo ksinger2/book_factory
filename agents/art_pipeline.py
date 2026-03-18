@@ -55,7 +55,7 @@ class ArtPipeline:
     # Default style only used when no style is provided
     DEFAULT_STYLE = "Soft watercolor children's book illustration with gentle colors and warm, friendly aesthetic. Character consistency across the full series: same face, same color, same eye shape, same outfit, same proportions, same silhouette, same world, same lighting language, same rendering style across every image."
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None, qa_first_only: bool = True, hard_rules: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", style: Optional[str] = None, eye_style: Optional[str] = None, reference_image: Optional[str] = None, qa_first_only: bool = True, hard_rules: Optional[str] = None, debug_mode: bool = False):
         """
         Initialize the ArtPipeline.
 
@@ -67,6 +67,7 @@ class ArtPipeline:
             eye_style: Specific eye style instructions for character consistency.
             reference_image: Base64 data URL of a reference image for character design.
             hard_rules: Strict rules that must be followed in ALL image generation (e.g., "NO ONE WEARS GREEN").
+            debug_mode: If True, use cheaper models and skip QA for testing (saves ~60-80% on API costs).
 
         Raises:
             ValueError: If no API key is provided and OPENAI_API_KEY env var is not set.
@@ -80,8 +81,23 @@ class ArtPipeline:
                 )
 
         self.client = OpenAI(api_key=api_key)
-        self.vision_model = model
-        self.image_model = "gpt-image-1"  # OpenAI's newest image generation model
+        self.debug_mode = debug_mode
+
+        # Use cheaper models and settings in debug mode
+        if debug_mode:
+            self.vision_model = model  # Keep vision model (only used if QA enabled)
+            self.image_model = "dall-e-2"  # Cheaper: $0.02 vs $0.05 per image
+            self.image_size = "1024x1024"  # Smaller, faster
+            self.image_quality = "standard"
+            self.skip_qa = True  # Skip vision QA checks entirely
+            logger.info("ArtPipeline running in DEBUG MODE - using dall-e-2, skipping QA")
+        else:
+            self.vision_model = model
+            self.image_model = "gpt-image-1"  # OpenAI's newest image generation model
+            self.image_size = "1536x1024"  # Higher quality
+            self.image_quality = "medium"
+            self.skip_qa = False
+
         self.style = style  # Store style at instance level
         self.eye_style = eye_style  # Store eye style for consistency
         self.reference_image = reference_image  # Store reference image for character design
@@ -94,15 +110,17 @@ class ArtPipeline:
         self.initial_backoff = 30  # seconds
         self.qa_first_only = qa_first_only  # Only QA character sheet to save costs
 
-        # Analyze reference image if provided
+        # Analyze reference image if provided (skip in debug mode to save costs)
         self.reference_features = None
-        if reference_image:
+        if reference_image and not debug_mode:
             logger.info("Analyzing reference image for character features...")
             self.reference_features = self._analyze_reference_image(reference_image)
             if self.reference_features:
                 logger.info(f"Extracted features: {self.reference_features[:200]}...")
+        elif reference_image and debug_mode:
+            logger.info("Skipping reference image analysis in debug mode")
 
-        logger.info(f"ArtPipeline initialized with image model: {self.image_model}")
+        logger.info(f"ArtPipeline initialized with image model: {self.image_model}, debug_mode: {debug_mode}")
         if style:
             logger.info(f"Using art style: {style[:100]}...")
         if eye_style:
@@ -710,7 +728,11 @@ CONSTRAINTS:
         while attempt < self.max_retries:
             try:
                 # Generate character sheet - use images.edit if reference image provided
-                if active_reference:
+                # Determine size for character sheet (landscape)
+                char_sheet_size = "1024x1024" if self.debug_mode else "1536x1024"
+
+                if active_reference and not self.debug_mode:
+                    # Note: dall-e-2 doesn't support images.edit the same way, so skip in debug mode
                     logger.info("Using images.edit with reference image for character sheet")
                     ref_path = self._prepare_reference_image_for_edit(active_reference)
                     # Prepend reference image instruction following best practices
@@ -728,21 +750,21 @@ Preserve their EXACT features in the illustrated character:
                             model=self.image_model,
                             image=[ref_file],  # Pass as list of file objects
                             prompt=ref_prompt,
-                            size="1536x1024"  # Landscape for character sheet
+                            size=char_sheet_size
                         )
                 else:
-                    # No reference image - use generate
-                    logger.info("Using images.generate (no reference image)")
+                    # No reference image or debug mode - use generate
+                    logger.info(f"Using images.generate with {self.image_model}")
                     response = self.client.images.generate(
                         model=self.image_model,
                         prompt=prompt,
-                        size="1536x1024",  # Landscape for character sheet
+                        size=char_sheet_size,
                         n=1,
-                        quality="medium"
+                        quality=self.image_quality
                     )
 
-                # gpt-image-1 returns base64 data
-                if response.data[0].b64_json:
+                # gpt-image-1 returns base64 data, dall-e-2 returns URL
+                if hasattr(response.data[0], 'b64_json') and response.data[0].b64_json:
                     self._save_image(response.data[0].b64_json, output_path)
                 elif response.data[0].url:
                     self._download_image(response.data[0].url, output_path)
@@ -751,11 +773,14 @@ Preserve their EXACT features in the illustrated character:
                 # Store character sheet path for scene generation
                 self.character_sheet_path = output_path
 
-                # Analyze the character sheet to extract detailed visual guide
-                logger.info("Analyzing character sheet for visual consistency...")
-                self.character_visual_guide = self._analyze_character_sheet(output_path)
-                if self.character_visual_guide:
-                    logger.info("Character visual guide extracted successfully")
+                # Analyze the character sheet to extract detailed visual guide (skip in debug mode)
+                if self.skip_qa:
+                    logger.info("Skipping character sheet analysis in debug mode")
+                else:
+                    logger.info("Analyzing character sheet for visual consistency...")
+                    self.character_visual_guide = self._analyze_character_sheet(output_path)
+                    if self.character_visual_guide:
+                        logger.info("Character visual guide extracted successfully")
 
                 return None, output_path
 
@@ -813,8 +838,11 @@ Preserve their EXACT features in the illustrated character:
         if output_path is None:
             output_path = Path.home() / "books_output" / "spreads" / f"spread_{int(time.time())}.png"
 
-        # Determine size based on type (gpt-image-1 supports various sizes)
-        if illustration_type == "cover":
+        # Determine size based on type and debug mode
+        if self.debug_mode:
+            # dall-e-2 only supports 256x256, 512x512, or 1024x1024
+            size = "1024x1024"
+        elif illustration_type == "cover":
             size = "1024x1536"  # Portrait for cover
         elif illustration_type == "back_cover":
             size = "1024x1536"
@@ -884,10 +912,21 @@ CONSTRAINTS:
         attempt = 0
         while attempt < self.max_retries:
             try:
-                # Use images.edit with character sheet as reference for consistency
-                logger.info(f"Using images.edit with character sheet for {illustration_type}")
-                # Prepend character reference instruction
-                ref_prompt = f"""CHARACTER REFERENCE: The attached image shows the character that must appear in this scene.
+                # Debug mode uses images.generate (dall-e-2 doesn't support edit the same way)
+                if self.debug_mode:
+                    logger.info(f"Using images.generate with {self.image_model} for {illustration_type} (debug mode)")
+                    response = self.client.images.generate(
+                        model=self.image_model,
+                        prompt=prompt,
+                        size=size,
+                        n=1,
+                        quality=self.image_quality
+                    )
+                else:
+                    # Use images.edit with character sheet as reference for consistency
+                    logger.info(f"Using images.edit with character sheet for {illustration_type}")
+                    # Prepend character reference instruction
+                    ref_prompt = f"""CHARACTER REFERENCE: The attached image shows the character that must appear in this scene.
 
 CRITICAL - Preserve these features EXACTLY from the reference:
 - Face shape: Same exact proportions
@@ -899,37 +938,37 @@ CRITICAL - Preserve these features EXACTLY from the reference:
 - Body proportions: Consistent with reference
 
 {prompt}"""
-                # Build list of image files - character sheet first, then additional refs
-                image_files = []
-                char_file = open(char_sheet_path, 'rb')
-                image_files.append(char_file)
+                    # Build list of image files - character sheet first, then additional refs
+                    image_files = []
+                    char_file = open(char_sheet_path, 'rb')
+                    image_files.append(char_file)
 
-                # Add additional reference files
-                extra_files = []
-                for extra_ref in additional_references:
-                    if extra_ref.exists():
-                        f = open(extra_ref, 'rb')
-                        extra_files.append(f)
-                        image_files.append(f)
+                    # Add additional reference files
+                    extra_files = []
+                    for extra_ref in additional_references:
+                        if extra_ref.exists():
+                            f = open(extra_ref, 'rb')
+                            extra_files.append(f)
+                            image_files.append(f)
 
-                if extra_files:
-                    ref_prompt += f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the {len(extra_files)} additional reference images for style consistency."
+                    if extra_files:
+                        ref_prompt += f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the {len(extra_files)} additional reference images for style consistency."
 
-                try:
-                    response = self.client.images.edit(
-                        model=self.image_model,
-                        image=image_files,  # Pass as list of file objects
-                        prompt=ref_prompt,
-                        size=size
-                    )
-                finally:
-                    # Close all files
-                    char_file.close()
-                    for f in extra_files:
-                        f.close()
+                    try:
+                        response = self.client.images.edit(
+                            model=self.image_model,
+                            image=image_files,  # Pass as list of file objects
+                            prompt=ref_prompt,
+                            size=size
+                        )
+                    finally:
+                        # Close all files
+                        char_file.close()
+                        for f in extra_files:
+                            f.close()
 
-                # gpt-image-1 returns base64 data
-                if response.data[0].b64_json:
+                # gpt-image-1 returns base64 data, dall-e-2 returns URL
+                if hasattr(response.data[0], 'b64_json') and response.data[0].b64_json:
                     self._save_image(response.data[0].b64_json, output_path)
                 elif response.data[0].url:
                     self._download_image(response.data[0].url, output_path)

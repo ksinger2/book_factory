@@ -181,6 +181,20 @@ def api_marketing_keywords():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def get_debug_mode():
+    """Get debug mode from environment variable or config."""
+    import os
+    # Environment variable takes precedence
+    env_debug = os.environ.get('BOOK_FACTORY_DEBUG', '').lower()
+    if env_debug in ('true', '1', 'yes'):
+        return True
+    if env_debug in ('false', '0', 'no'):
+        return False
+    # Fall back to config
+    cfg = load_config()
+    return cfg.get('global', {}).get('debug_mode', False)
+
+
 @app.route('/api/story', methods=['POST'])
 def api_story():
     """Generate a story from a brief."""
@@ -191,7 +205,12 @@ def api_story():
         if not brief:
             return jsonify({"ok": False, "error": "No brief provided"}), 400
 
-        engine = StoryEngine()
+        # Check for debug mode
+        debug_mode = get_debug_mode()
+        if debug_mode:
+            log.info("Story generation running in DEBUG MODE (using gpt-4o-mini)")
+
+        engine = StoryEngine(debug_mode=debug_mode)
         result = engine.run(brief)
 
         # Save to output dir - use book title for directory name
@@ -353,6 +372,11 @@ def api_art():
         current = 0
 
         try:
+            # Check for debug mode
+            debug_mode = get_debug_mode()
+            if debug_mode:
+                log.info("Art generation running in DEBUG MODE (using dall-e-2, skipping QA)")
+
             # Initialize pipeline with art style, eye style, reference image, and hard rules from the brief
             art_style_for_pipeline = art_package.get('art_style', '')
             eye_style_for_pipeline = art_package.get('eye_style', '')
@@ -362,7 +386,8 @@ def api_art():
                 style=art_style_for_pipeline,
                 eye_style=eye_style_for_pipeline,
                 reference_image=reference_image_for_pipeline,
-                hard_rules=hard_rules_for_pipeline
+                hard_rules=hard_rules_for_pipeline,
+                debug_mode=debug_mode
             )
             results = {
                 "success": False,
@@ -568,11 +593,17 @@ def api_charsheet():
         from agents.art_pipeline import ArtPipeline
 
         try:
+            # Check for debug mode
+            debug_mode = get_debug_mode()
+            if debug_mode:
+                log.info("Character sheet generation running in DEBUG MODE")
+
             pipeline = ArtPipeline(
                 style=art_style,
                 eye_style=eye_style,
                 reference_image=reference_image,
-                hard_rules=hard_rules
+                hard_rules=hard_rules,
+                debug_mode=debug_mode
             )
 
             yield f"data: {json.dumps({'stage': 'charsheet_start', 'message': 'Generating character sheet...'})}\n\n"
@@ -776,11 +807,17 @@ def api_illustrations():
         current = 0
 
         try:
+            # Check for debug mode (from request or config)
+            art_debug_mode = get_debug_mode()
+            if art_debug_mode:
+                log.info("Illustration generation running in DEBUG MODE")
+
             pipeline = ArtPipeline(
                 style=art_style,
                 eye_style=eye_style,
                 reference_image=reference_image,
-                hard_rules=hard_rules
+                hard_rules=hard_rules,
+                debug_mode=art_debug_mode
             )
 
             # Load character visual guide if available
@@ -1022,8 +1059,9 @@ def api_regenerate_image():
             except Exception as e:
                 log.warning(f"Could not load art_result.json: {e}")
 
-        # Initialize pipeline with character visual guide
-        pipeline = ArtPipeline(style=art_style, hard_rules=hard_rules)
+        # Initialize pipeline with character visual guide and debug mode
+        regen_debug_mode = get_debug_mode()
+        pipeline = ArtPipeline(style=art_style, hard_rules=hard_rules, debug_mode=regen_debug_mode)
         if character_visual_guide:
             pipeline.character_visual_guide = character_visual_guide
 
@@ -1396,8 +1434,9 @@ def api_coloring_reference():
             style=brief_data.get('style', 'bold-easy')
         )
 
-        # Generate reference sheet
-        generator = ColoringStyleGenerator(draft_mode=draft_mode)
+        # Generate reference sheet - combine draft_mode from request with global debug_mode
+        effective_draft_mode = draft_mode or get_debug_mode()
+        generator = ColoringStyleGenerator(draft_mode=effective_draft_mode)
         output_path = book_dir / "reference_sheet.png"
         success, path = generator.generate_reference_sheet(style_brief, output_path)
 
@@ -1525,7 +1564,9 @@ def api_coloring_pages():
         pages_dir = book_dir / "pages"
         pages_dir.mkdir(exist_ok=True)
 
-        generator = ColoringPageGenerator(draft_mode=draft_mode)
+        # Combine draft_mode from request with global debug_mode
+        effective_draft_mode = draft_mode or get_debug_mode()
+        generator = ColoringPageGenerator(draft_mode=effective_draft_mode)
         qa_checker = ColoringQAChecker()
 
         results = {
@@ -1736,7 +1777,9 @@ def api_coloring_regenerate():
                     extra_refs.append(local_path)
                     log.info(f"Added additional reference: {local_path}")
 
-        generator = ColoringPageGenerator(draft_mode=draft_mode)
+        # Combine draft_mode from request with global debug_mode
+        effective_draft_mode = draft_mode or get_debug_mode()
+        generator = ColoringPageGenerator(draft_mode=effective_draft_mode)
         qa_checker = ColoringQAChecker()
 
         # Generate with additional references if provided
@@ -1830,7 +1873,9 @@ def api_coloring_cover():
             page_files = sorted(pages_dir.glob("page_*.png"))[:3]
             sample_pages = [Path(p) for p in page_files]
 
-        generator = ColoringCoverGenerator(draft_mode=draft_mode)
+        # Combine draft_mode from request with global debug_mode
+        effective_draft_mode = draft_mode or get_debug_mode()
+        generator = ColoringCoverGenerator(draft_mode=effective_draft_mode)
         results = generator.generate_both(cover_brief, sample_pages, book_dir)
 
         response = {

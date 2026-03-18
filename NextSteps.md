@@ -1,11 +1,57 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-16
-> **Session ID:** session-20260316a
+> **Last Updated:** 2026-03-17
+> **Session ID:** session-20260317a
 
 ---
 
-## Latest Changes (2026-03-16)
+## Latest Changes (2026-03-17)
+
+### Debug/Cost-Saving Mode for Testing
+Added global debug mode to reduce API costs by ~80% during development and testing:
+
+**What it does:**
+- **Story Engine:** Uses `gpt-4o-mini` instead of `gpt-4o` (~90% savings)
+- **Art Pipeline:** Uses `dall-e-2` instead of `gpt-image-1` (~60% savings)
+- **Image Size:** Uses `1024x1024` instead of `1536x1024` (faster)
+- **Vision QA:** Skipped entirely (100% savings)
+- **Reference Analysis:** Skipped (saves vision API calls)
+
+**How to enable:**
+
+Option 1 - Config file (`config/studio_config.yaml`):
+```yaml
+global:
+  debug_mode: true  # Master switch for all agents
+```
+
+Option 2 - Environment variable:
+```bash
+BOOK_FACTORY_DEBUG=true python run.py
+```
+
+Option 3 - For E2E tests:
+```bash
+BOOK_FACTORY_DEBUG=true python3 tests/test_full_workflow.py --full
+```
+
+**Cost comparison per full book:**
+| Component | Production | Debug Mode | Savings |
+|-----------|-----------|------------|---------|
+| Story Generation | gpt-4o (~$0.03) | gpt-4o-mini (~$0.003) | 90% |
+| Images (each) | gpt-image-1 ($0.05) | dall-e-2 ($0.02) | 60% |
+| Vision QA | gpt-4o-mini | skipped | 100% |
+| **Total per test** | ~$3-5 | ~$0.50-1.00 | **80%** |
+
+**Files modified:**
+- `agents/story_engine.py` - Added `debug_mode` parameter
+- `agents/art_pipeline.py` - Added `debug_mode` parameter, uses cheaper models
+- `config/studio_config.yaml` - Added `global.debug_mode` master switch
+- `run.py` - Added `get_debug_mode()` helper, wired to all agent constructors
+
+---
+
+## Previous Changes (2026-03-16)
 
 ### Image Regeneration Fixes
 - **Character visual guide** now loaded from `art_result.json` when regenerating images
@@ -138,11 +184,13 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 - Character creation from story text with diversity support
 - Amazon listing generation with SEO optimization
 - Quality validation (scene count, word count, rhyme patterns)
+- **Cost-saving mode** uses gpt-4o-mini for testing (2026-03-17)
 
 **Configuration:**
-- Model: gpt-4o (gpt-4o-mini too restrictive for diverse content)
+- Model: gpt-4o (or gpt-4o-mini in debug mode)
 - Max retries: 5 with exponential backoff
 - Grammar guide: resources/grammar_guide.txt
+- **global.debug_mode: false** - Uses cheaper model when true
 
 **Recent Activity:**
 - 25+ story packages generated
@@ -170,13 +218,15 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 - Recurring character detection
 - **Moderation error handling** with automatic prompt sanitization
 - **Debug mode** for step-by-step image approval
+- **Cost-saving mode** uses dall-e-2 and skips QA (2026-03-17)
 
 **Configuration:**
-- Image model: gpt-image-1
+- Image model: gpt-image-1 (or dall-e-2 in debug mode)
 - Image quality: medium (50% cost savings)
-- QA: first image only (qa_first_only=True)
+- QA: first image only (qa_first_only=True), skipped in debug mode
 - Max retries: 3
-- **debug_mode: false** (set to true for step-by-step approval)
+- **global.debug_mode: false** - Master switch for cost-saving mode
+- **art.debug_mode: false** - Step-by-step approval mode
 
 **Recent Activity:**
 - 15 books with art_result.json files

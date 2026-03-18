@@ -55,13 +55,14 @@ class StoryEngine:
     Handles story generation, character design, Amazon listings, and quality validation.
     """
 
-    def __init__(self, api_key: Optional[str] = None, max_retries: int = 5):
+    def __init__(self, api_key: Optional[str] = None, max_retries: int = 5, debug_mode: bool = False):
         """
         Initialize the StoryEngine with OpenAI API client.
 
         Args:
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
             max_retries: Maximum retry attempts for API calls
+            debug_mode: If True, use cheaper models for testing (saves ~90% on API costs)
         """
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
@@ -69,9 +70,17 @@ class StoryEngine:
 
         self.client = OpenAI(api_key=self.api_key)
         self.max_retries = max_retries
-        self.model = "gpt-4o"  # Using gpt-4o for nuanced content (gpt-4o-mini too restrictive)
+        self.debug_mode = debug_mode
 
-    def _call_api(self, system_prompt: str, user_prompt: str, max_tokens: int = 4096) -> str:
+        # Use cheaper model in debug mode
+        if debug_mode:
+            self.model = "gpt-4o-mini"
+            self.max_tokens = 2048  # Smaller context for faster responses
+        else:
+            self.model = "gpt-4o"  # Using gpt-4o for nuanced content (gpt-4o-mini too restrictive)
+            self.max_tokens = 4096
+
+    def _call_api(self, system_prompt: str, user_prompt: str, max_tokens: int = None) -> str:
         """
         Call OpenAI API with retry logic.
 
@@ -86,6 +95,10 @@ class StoryEngine:
         Raises:
             ValueError: If max retries exceeded
         """
+        # Use instance max_tokens if not explicitly provided
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
         for attempt in range(self.max_retries):
             try:
                 response = self.client.chat.completions.create(
