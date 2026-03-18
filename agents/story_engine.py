@@ -142,6 +142,15 @@ class StoryEngine:
         # Fix missing commas between objects in arrays ("}{ -> "},{")
         text = re.sub(r'\}(\s*)\{', r'},\1{', text)
 
+        # Fix missing commas between array elements ("value" "value2" -> "value", "value2")
+        text = re.sub(r'"(\s*)"(?=[^:,}\]])', r'",\1"', text)
+
+        # Fix missing commas between key-value pairs ("value"\s+"key": -> "value",\n"key":)
+        text = re.sub(r'"\s*\n(\s*)"([^"]+)":', r'",\n\1"\2":', text)
+
+        # Fix missing commas after closing bracket/brace followed by quote
+        text = re.sub(r'(\]|\})(\s+)"', r'\1,\2"', text)
+
         # Fix unescaped newlines inside strings (replace with \n)
         # This is tricky - we need to be careful not to break valid JSON
         # Only fix obvious cases where there's a newline between quotes

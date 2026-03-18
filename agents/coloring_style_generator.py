@@ -420,43 +420,21 @@ Generate exactly {num_pages} lines, one concept per line:"""
         logger.info(f"Resolved art_style: '{art_style[:50]}...'")
         logger.info(f"=== END STYLE DEBUG ===")
 
-        # Build the prompt with STRONG theme emphasis
-        prompt = f"""*** THEME IS EVERYTHING - READ THIS FIRST ***
-Create a coloring book reference sheet for the theme: "{brief.theme}"
+        # Build concise prompt (DALL-E limit is 1000 chars)
+        # Only include essential info
+        notes_str = f" Notes: {brief.notes[:100]}" if brief.notes else ""
+        prompt = f"""Coloring book style sheet for "{brief.theme}" theme.
 
-EVERY SINGLE ELEMENT ON THIS PAGE MUST BE DIRECTLY RELATED TO: {brief.theme}
-DO NOT include mandalas, geometric patterns, or generic designs.
-ONLY include objects, items, and scenes that match "{brief.theme}" exactly.
+Draw 4-6 {brief.theme} items. {age_specs['line_weight']}. {age_specs['description']}.
 
-=== WHAT TO DRAW ===
-Draw 4-6 different {brief.theme}-related items arranged on the page:
-- Each item must be something you would see in a "{brief.theme}" context
-- Examples of {brief.theme} items: things directly associated with {brief.theme}
-- NO abstract patterns, NO mandalas, NO geometric shapes unless the theme specifically requires them
-- Each element should be a recognizable object related to {brief.theme}
+Style: {art_style[:150]}
 
-=== ART STYLE ===
-{art_style}
-
-=== TECHNICAL SPECS ===
-- Age Level: {brief.age_level} ({age_specs['description']})
-- Difficulty: {brief.difficulty}
-- Line Weight: {age_specs['line_weight']}
-- Complexity: {age_specs['planes']}
-- Coloring Areas: {age_specs['areas']}
-
-{f"ADDITIONAL NOTES: {brief.notes}" if brief.notes else ""}
-
-=== ABSOLUTE REQUIREMENTS ===
-1. PURE BLACK LINES on WHITE background ONLY - no colors, no gray, no shading
-2. ALL shapes must be CLOSED - every line connects to form fillable areas
-3. NO text, NO labels, NO words, NO numbers, NO writing
-4. NO watermarks, NO signatures
-5. NOTHING touches any edge - 5% margin minimum on ALL sides
-6. ALL elements 100% complete - no cropping
-7. ZERO random dots or specks - perfectly clean white background
-
-REMEMBER: This is a "{brief.theme}" coloring book. Every element must match that theme."""
+Requirements:
+- BLACK LINES on WHITE only, no colors/gray
+- Closed shapes for coloring
+- No text/labels/watermarks
+- 5% margin, nothing cropped
+- Clean white background{notes_str}"""
 
         logger.info(f"Generating reference sheet: {brief.theme}, {brief.age_level}, {brief.difficulty}")
 
