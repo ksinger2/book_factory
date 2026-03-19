@@ -5,7 +5,40 @@
 
 ---
 
+## Session Reinitialized (2026-03-18)
+
+All 5 domain agents have synchronized. Summary:
+
+| Agent | Status | Key Finding |
+|-------|--------|-------------|
+| Niche Researcher | PLACEHOLDER | No functional agent - hardcoded briefs only |
+| Story Engine | PRODUCTION | 25+ books, JSON repair added, debug mode working |
+| Art Pipeline | READY | 18 books with art, moderation handling, cost-saving mode |
+| PDF Builder | READY | 40+ builds, 2 phantom PDFs need rebuild |
+| KDP Publisher | BLOCKED | Selector timeout on Content tab - needs live UI validation |
+
+**Active Pipeline:** 35+ books generated in past week, 5 ready for KDP upload
+
+---
+
 ## Latest Changes (2026-03-18)
+
+### Story Engine Capitalization Fix
+Removed brittle hardcoded capitalization post-processing and strengthened LLM prompts instead:
+
+**Removed:**
+- `_fix_capitalization()` method with 60+ word blocklist
+- `_fix_story_capitalization()` wrapper method
+- Post-processing call after JSON parsing
+
+**Added:**
+- Stronger CAPITALIZATION section in system prompts with clear examples:
+  - WRONG: "The Happy Penguin Loved To Dance"
+  - RIGHT: "The happy penguin loved to dance"
+- Standard English rules (first word of sentence, proper nouns only)
+- Updated both rhyming and prose prompts
+
+**Rationale:** The word list approach was brittle (can never cover all words), unnecessary (LLM handles this with proper instructions), and hard to maintain.
 
 ### Bug Fixes — Story Generation (QA verified, live tested)
 
@@ -148,15 +181,16 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 
 ---
 
-## Agent Status Summary
+## Agent Status Summary (Updated 2026-03-18)
 
 | Agent | Status | Recent Activity | Critical Issues |
 |-------|--------|-----------------|-----------------|
-| Story Engine | PRODUCTION-READY | 25+ books generated | Word count slightly tight (289 vs 300) |
-| Art Pipeline | READY | 15 books with art | 3 recent books missing spreads in art_result.json |
-| PDF Builder | READY | 9 complete PDFs | 2 books have 15KB interior PDFs (too small) |
-| KDP Publisher | READY | Content tab automated | Selectors need live validation |
-| KDP Marketing | NEW | Just created | Needs end-to-end testing |
+| Niche Researcher | DISABLED | Hardcoded placeholder | Full agent removed - needs rebuild |
+| Story Engine | PRODUCTION | 25+ books, JSON repair | Rhyme validation too sensitive |
+| Art Pipeline | READY | 18 books with art, debug mode | Oliver's book missing spreads |
+| PDF Builder | READY | 40+ builds successful | 2 phantom PDFs (Carl, Christopher) |
+| KDP Publisher | BLOCKED | 0/2 publishes | Content tab selector timeout |
+| KDP Marketing | NEW | Integrated in dashboard | Needs E2E testing |
 
 **Books Ready for Publishing:**
 - Priscilla's Magical Forest Adventure - **COMPLETE** (Interior 22MB, Cover 56KB, Kindle 815KB)
@@ -374,22 +408,27 @@ Based on manual KDP publish attempt for Priscilla's book, added:
 
 ---
 
-## Recommended Next Actions
+## Recommended Next Actions (Updated 2026-03-18)
 
-### Priority 1: First KDP Publish
-1. **Publish Priscilla's book** - Complete with all 3 files
-2. Validate KDP selectors work with current UI
-3. Document any required manual interventions
+### Priority 1: Unblock KDP Publishing (CRITICAL)
+1. **Fix Content tab selector** - Modal popover intercepting clicks
+2. **First publish test:** Priscilla's Magical Forest Adventure (dry-run first)
+3. Add screenshot capture on failure for debugging
 
-### Priority 2: Fix Pipeline Breaks
-4. Rebuild Carl's interior PDF (currently 15KB)
-5. Fix incomplete art_result.json files
-6. Add PDF size validation
+### Priority 2: Fix Pipeline Issues
+4. **Rebuild Carl's interior PDF** - Currently 15KB (phantom)
+5. **Fix Oliver's art_result.json** - Missing spreads array
+6. Add PDF size validation (detect <500KB interiors)
 
-### Priority 3: Technical Debt
-7. Fix competition score formula in niche researcher
-8. Update ARCHITECTURE.md (Claude → OpenAI)
-9. Add macOS font support to PDF builder
+### Priority 3: Restore Research Capability
+7. **Re-implement Niche Researcher** - Current placeholder uses hardcoded briefs
+8. Create smart brief selector from existing niche_report.json (11 ranked niches)
+9. Add market analysis using Claude API (replace broken scraping)
+
+### Priority 4: Technical Debt
+10. Fix rhyme validation algorithm (too many false positives)
+11. Update ARCHITECTURE.md (Claude → OpenAI references)
+12. Add macOS font path support to PDF builder
 
 ---
 

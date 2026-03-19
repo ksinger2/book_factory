@@ -164,27 +164,41 @@ class StoryEngine:
         # Fix missing commas after closing bracket/brace followed by quote
         text = re.sub(r'(\]|\})(\s+)"', r'\1,\2"', text)
 
-        # Fix unescaped newlines inside strings (replace with \n)
-        # This is tricky - we need to be careful not to break valid JSON
-        # Only fix obvious cases where there's a newline between quotes
-        lines = text.split('\n')
-        fixed_lines = []
+        # Fix unescaped newlines inside strings
+        # Use a character-by-character approach to properly track string boundaries
+        result = []
         in_string = False
-        for line in lines:
-            # Count unescaped quotes to track if we're in a string
-            quote_count = len(re.findall(r'(?<!\\)"', line))
-            if in_string:
-                # We're continuing a string from the previous line
-                fixed_lines[-1] = fixed_lines[-1] + '\\n' + line
-            else:
-                fixed_lines.append(line)
-            # Toggle in_string if odd number of quotes
-            if quote_count % 2 == 1:
+        i = 0
+        while i < len(text):
+            char = text[i]
+
+            if char == '\\' and i + 1 < len(text):
+                # Escaped character - add both and skip next
+                result.append(char)
+                result.append(text[i + 1])
+                i += 2
+                continue
+
+            if char == '"':
                 in_string = not in_string
+                result.append(char)
+                i += 1
+                continue
 
-        text = '\n'.join(fixed_lines)
+            if char == '\n':
+                if in_string:
+                    # Newline inside a string - escape it properly
+                    result.append('\\n')
+                else:
+                    # Newline outside string - keep as-is
+                    result.append(char)
+                i += 1
+                continue
 
-        return text
+            result.append(char)
+            i += 1
+
+        return ''.join(result)
 
     def _parse_json_response(self, response: str, context: str = "response") -> Dict[str, Any]:
         """
@@ -263,12 +277,17 @@ class StoryEngine:
             system_prompt = """You are an expert children's book author and editor specializing in rhyming stories.
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
-1. CAPITALIZATION — follow standard English rules:
-   - The first word of every sentence gets a capital letter.
-   - Proper nouns (character names, place names) are always capitalized.
-   - Every other word is lowercase — no random capitals mid-sentence.
-   - Correct: "He splashed into the cold blue lake."
-   - Wrong:   "He Splashed Into The Cold Blue Lake."
+1. CAPITALIZATION (Standard English Rules):
+   - Capitalize ONLY the first word of each sentence
+   - Capitalize proper nouns: character names (Luna, Felix), place names (Paris, California)
+   - Do NOT capitalize common words mid-sentence, even if they seem important
+   - Exception: ALL CAPS may be used sparingly for emphasis (e.g., "You can do it!")
+
+   WRONG: "The Happy Penguin Loved To Dance"
+   RIGHT: "The happy penguin loved to dance"
+
+   WRONG: "Luna Found A Magical Forest"
+   RIGHT: "Luna found a magical forest"
 
 2. PUNCTUATION:
    - Use exactly ONE punctuation mark at the end of each sentence
@@ -314,12 +333,17 @@ Format your response as valid JSON."""
             system_prompt = """You are an expert children's book author and editor specializing in engaging prose stories.
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
-1. CAPITALIZATION — follow standard English rules:
-   - The first word of every sentence gets a capital letter.
-   - Proper nouns (character names, place names) are always capitalized.
-   - Every other word is lowercase — no random capitals mid-sentence.
-   - Correct: "She ran through the sunny field."
-   - Wrong:   "She Ran Through The Sunny Field."
+1. CAPITALIZATION (Standard English Rules):
+   - Capitalize ONLY the first word of each sentence
+   - Capitalize proper nouns: character names (Luna, Felix), place names (Paris, California)
+   - Do NOT capitalize common words mid-sentence, even if they seem important
+   - Exception: ALL CAPS may be used sparingly for emphasis (e.g., "You can do it!")
+
+   WRONG: "The Happy Penguin Loved To Dance"
+   RIGHT: "The happy penguin loved to dance"
+
+   WRONG: "Luna Found A Magical Forest"
+   RIGHT: "Luna found a magical forest"
 
 2. PUNCTUATION:
    - Use exactly ONE punctuation mark at the end of each sentence
@@ -743,24 +767,9 @@ Return as JSON:
             if 'text_position' not in scene:
                 errors.append(f"Scene {i}: Missing 'text_position'")
 
-        # Basic rhyme detection (AABB pattern) - only for rhyming stories
-        if is_rhyming:
-            rhyme_issues = 0
-            for i, scene in enumerate(scenes, 1):
-                text = scene.get('text', [])
-                if len(text) >= 2:
-                    # Check if lines likely rhyme (simplified check based on ending sounds)
-                    for j in range(0, min(4, len(text)), 2):
-                        if j + 1 < len(text):
-                            line1_end = text[j].split()[-1].lower() if text[j].split() else ""
-                            line2_end = text[j + 1].split()[-1].lower() if text[j + 1].split() else ""
-                            # Simple check: last 2-3 characters should be similar
-                            if line1_end and line2_end:
-                                if line1_end[-2:] != line2_end[-2:]:
-                                    rhyme_issues += 1
-
-            if rhyme_issues > 0:
-                errors.append(f"Potential rhyme issues detected in {rhyme_issues} couplet(s)")
+        # Note: Rhyme validation removed - the simple suffix-matching approach
+        # produced too many false positives (e.g., "be"/"see", "tune"/"moon", "there"/"air").
+        # The LLM follows AABB rhyming instructions well, and false positives were confusing.
 
         # Check for problematic content (very basic)
         problematic_words = ['scary', 'evil', 'dark', 'death', 'blood', 'violence']
