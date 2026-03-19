@@ -955,20 +955,18 @@ def api_illustrations():
                     art_result["cover"] = str(cpath)
                     yield f"data: {json.dumps({'stage': 'image_done', 'current': current, 'total': total_images, 'message': 'Cover complete!', 'image_path': 'cover.png', 'image_type': 'cover', 'debug_mode': debug_mode})}\n\n"
 
-                    # Debug mode: wait for approval before continuing
-                    if debug_mode:
-                        approval_file = book_dir / ".cover_approved"
-                        # Remove any existing approval marker
-                        if approval_file.exists():
-                            approval_file.unlink()
-                        yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': current, 'total': total_images, 'message': 'Cover ready - waiting for approval...', 'image_type': 'cover', 'image_path': 'cover.png'})}\n\n"
-                        while not approval_file.exists():
-                            if book_id in cancelled_jobs:
-                                yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
-                                cancelled_jobs.discard(book_id)
-                                return
-                            time.sleep(0.5)
-                        yield f"data: {json.dumps({'stage': 'approved', 'current': current, 'total': total_images, 'message': 'Cover approved! Continuing...', 'image_type': 'cover'})}\n\n"
+                    # Wait for approval before continuing
+                    approval_file = book_dir / ".cover_approved"
+                    if approval_file.exists():
+                        approval_file.unlink()
+                    yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': current, 'total': total_images, 'message': 'Cover ready - waiting for approval...', 'image_type': 'cover', 'image_path': 'cover.png'})}\n\n"
+                    while not approval_file.exists():
+                        if book_id in cancelled_jobs:
+                            yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
+                            cancelled_jobs.discard(book_id)
+                            return
+                        time.sleep(0.5)
+                    yield f"data: {json.dumps({'stage': 'approved', 'current': current, 'total': total_images, 'message': 'Cover approved! Continuing...', 'image_type': 'cover'})}\n\n"
 
                 except Exception as e:
                     yield f"data: {json.dumps({'stage': 'image_error', 'current': current, 'total': total_images, 'message': f'Cover failed: {str(e)}'})}\n\n"
@@ -1015,20 +1013,18 @@ Page Text (the verse for this illustration):
                     art_result["spreads"].append(str(spath))
                     yield f"data: {json.dumps({'stage': 'image_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!', 'image_path': f'scene_{i+1:02d}.png', 'image_type': 'spread', 'index': i+1, 'debug_mode': debug_mode})}\n\n"
 
-                    # Debug mode: wait for approval before generating next spread
-                    if debug_mode:
-                        approval_file = book_dir / f".spread_{i+1:02d}_approved"
-                        # Remove any existing approval marker
-                        if approval_file.exists():
-                            approval_file.unlink()
-                        yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': current, 'total': total_images, 'message': f'Spread {i+1} ready - waiting for approval...', 'image_type': 'spread', 'image_path': f'scene_{i+1:02d}.png', 'index': i+1})}\n\n"
-                        while not approval_file.exists():
-                            if book_id in cancelled_jobs:
-                                yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
-                                cancelled_jobs.discard(book_id)
-                                return
-                            time.sleep(0.5)
-                        yield f"data: {json.dumps({'stage': 'approved', 'current': current, 'total': total_images, 'message': f'Spread {i+1} approved! Continuing...', 'image_type': 'spread', 'index': i+1})}\n\n"
+                    # Wait for approval before generating next spread
+                    approval_file = book_dir / f".spread_{i+1:02d}_approved"
+                    if approval_file.exists():
+                        approval_file.unlink()
+                    yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': current, 'total': total_images, 'message': f'Spread {i+1} ready - waiting for approval...', 'image_type': 'spread', 'image_path': f'scene_{i+1:02d}.png', 'index': i+1})}\n\n"
+                    while not approval_file.exists():
+                        if book_id in cancelled_jobs:
+                            yield f"data: {json.dumps({'stage': 'cancelled', 'current': current, 'total': total_images, 'message': 'Generation cancelled by user'})}\n\n"
+                            cancelled_jobs.discard(book_id)
+                            return
+                        time.sleep(0.5)
+                    yield f"data: {json.dumps({'stage': 'approved', 'current': current, 'total': total_images, 'message': f'Spread {i+1} approved! Continuing...', 'image_type': 'spread', 'index': i+1})}\n\n"
 
                 except Exception as e:
                     yield f"data: {json.dumps({'stage': 'image_error', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} failed: {str(e)}'})}\n\n"
@@ -1760,20 +1756,18 @@ def api_coloring_pages():
                         })
                         yield f"data: {json.dumps({'stage': 'page_done', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} complete!', 'image_path': f'pages/page_{page_num:02d}.png', 'qa_passed': True, 'debug_mode': debug_mode})}\n\n"
 
-                        # Debug mode: wait for approval before generating next page
-                        if debug_mode:
-                            approval_file = book_dir / f".page_{page_num:02d}_approved"
-                            # Remove any existing approval marker
-                            if approval_file.exists():
-                                approval_file.unlink()
-                            yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} ready - waiting for approval...', 'image_type': 'page', 'image_path': f'pages/page_{page_num:02d}.png', 'index': page_num})}\n\n"
-                            while not approval_file.exists():
-                                if book_id in cancelled_jobs:
-                                    yield f"data: {json.dumps({'stage': 'cancelled', 'current': page_num, 'total': num_pages, 'message': 'Generation cancelled by user'})}\n\n"
-                                    cancelled_jobs.discard(book_id)
-                                    return
-                                time.sleep(0.5)
-                            yield f"data: {json.dumps({'stage': 'approved', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} approved! Continuing...', 'image_type': 'page', 'index': page_num})}\n\n"
+                        # Wait for approval before generating next page
+                        approval_file = book_dir / f".page_{page_num:02d}_approved"
+                        if approval_file.exists():
+                            approval_file.unlink()
+                        yield f"data: {json.dumps({'stage': 'awaiting_approval', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} ready - waiting for approval...', 'image_type': 'page', 'image_path': f'pages/page_{page_num:02d}.png', 'index': page_num})}\n\n"
+                        while not approval_file.exists():
+                            if book_id in cancelled_jobs:
+                                yield f"data: {json.dumps({'stage': 'cancelled', 'current': page_num, 'total': num_pages, 'message': 'Generation cancelled by user'})}\n\n"
+                                cancelled_jobs.discard(book_id)
+                                return
+                            time.sleep(0.5)
+                        yield f"data: {json.dumps({'stage': 'approved', 'current': page_num, 'total': num_pages, 'message': f'Page {page_num} approved! Continuing...', 'image_type': 'page', 'index': page_num})}\n\n"
 
                         break
                     else:

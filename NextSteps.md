@@ -7,6 +7,18 @@
 
 ## Latest Changes (2026-03-19)
 
+### Per-Image Approval Now Default for All Image Generation
+Removed the `debug_mode` gate from per-image approval. Every generated image (cover, spreads, coloring pages) now pauses and waits for user approval before generating the next one. Previously this only happened when `art.debug_mode: true` was set in config.
+
+**What was done:**
+- **`run.py`** — Removed `if debug_mode:` gates from three approval loops:
+  - Cover approval (line ~959)
+  - Spread approval (line ~1019)
+  - Coloring page approval (line ~1764)
+- Frontend already handled `awaiting_approval` SSE events — no UI changes needed
+
+**Files modified:** `run.py` (3 approval blocks ungated)
+
 ### Chrome Profile Integration for KDP Publisher
 Wired up the existing but unused Chrome profile methods so the publisher can reuse your Amazon login from Chrome instead of requiring manual login every time.
 
