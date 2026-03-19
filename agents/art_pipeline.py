@@ -1008,7 +1008,7 @@ PHYSICAL COHERENCE (REQUIRED):
                             image_files.append(f)
 
                     if extra_files:
-                        ref_prompt += f"\n\n*** ADDITIONAL STYLE REFERENCES ***\nUse the {len(extra_files)} additional reference images for style consistency."
+                        ref_prompt += f"\n\n*** LOCATION REFERENCE IMAGE ***\nThe additional image shows a PREVIOUS scene at this SAME location. Match the furniture layout, room orientation, and background elements EXACTLY — same furniture positions, same wall/window placement, same room layout. Only the character's pose and expression should differ."
 
                     try:
                         response = self.client.images.edit(

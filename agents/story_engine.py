@@ -492,15 +492,29 @@ IMPORTANT — ILLUSTRATION PROMPTS:
 - NEVER refer to an animal character as a human, boy, girl, man, woman, or person in illustration prompts
 - Always describe the character using their species first (e.g. "the red panda", "the rabbit", "the bear cub")
 
+IMPORTANT — LOCATION & FURNITURE CONSISTENCY:
+- First, identify every distinct location in the story (e.g. "bedroom", "kitchen", "forest", "living room")
+- For each indoor location, define its furniture layout ONCE in a "locations" dictionary (e.g. bed position, window side, desk placement)
+- Every scene set in that location MUST use the EXACT same furniture layout description word-for-word
+- Include a "location" field in each scene identifying which location it uses
+- The composition notes for scenes sharing a location must describe furniture in IDENTICAL positions every time
+- WRONG: Scene 2 says "bed on the left wall", Scene 7 says "bed against the far wall" (same bedroom!)
+- RIGHT: Both Scene 2 and Scene 7 use exactly "bed against the right wall, window on the left, wooden dresser in the corner"
+
 Return as JSON with this structure:
 {{
     "title": "Story Title",
+    "locations": {{
+        "bedroom": "Cozy bedroom. Wooden bed frame against the right wall with a blue patchwork quilt. Single window on the left wall with yellow curtains. Small wooden dresser in the far left corner. Warm lamp on the bedside table to the right of the bed.",
+        "kitchen": "Bright kitchen. Round wooden table in the center with two chairs. Counter along the back wall with a window above the sink on the right. Refrigerator on the left wall."
+    }},
     "scenes": [
         {{
             "scene_num": 1,
+            "location": "bedroom",
             "text": {text_format},
-            "illustration_prompt": "detailed description for artist",
-            "composition": "Landscape orientation. Character on left side. Forest background. Soft lighting.",
+            "illustration_prompt": "detailed description for artist — must include the exact furniture layout from the locations dictionary",
+            "composition": "Landscape orientation. Character on left side. Bedroom setting: bed against right wall, window on left. Soft warm lighting.",
             "text_position": "top-left"
         }},
         ...

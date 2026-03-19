@@ -345,17 +345,29 @@ def api_art():
     if eye_style:
         char_description += f"\n\nEYE STYLE: {eye_style}"
 
-    # Build spreads with full context (illustration prompt + composition + page text)
+    # Location bible — furniture/room layout defined once, referenced by all scenes in that location
+    locations = story.get('locations', {})
+
+    # Build spreads with full context (illustration prompt + composition + location + page text)
     spreads_with_context = []
     for i, scene in enumerate(scenes):
         page_text = "\n".join(scene.get('text', []))
         base_illus = scene.get('illustration_prompt', '')
         composition = scene.get('composition', '')
+        location_key = scene.get('location', '').lower().strip()
+
+        # Inject location furniture bible if this scene has a known location
+        location_desc = locations.get(location_key, '')
+        if location_desc:
+            base_illus += f"\n\nLOCATION LAYOUT (MUST BE IDENTICAL EVERY TIME THIS ROOM APPEARS): {location_desc}"
+
         if composition:
             base_illus += f"\n\nCOMPOSITION & LAYOUT: {composition}"
+
         illustration_prompt = build_prompt(base_illus)
         spreads_with_context.append({
             "page_num": i + 1,
+            "location": location_key,
             "illustration_prompt": illustration_prompt,
             "page_text": page_text
         })
@@ -534,6 +546,8 @@ Create a consistent character sheet showing various poses and expressions."""
             spreads = art_package.get('spreads', [])
             story_title = art_package.get('title', 'Untitled')
             char_block = art_package.get('character_block', '')
+            # Track first generated image per location for visual reference consistency
+            location_reference_images = {}  # location_key -> Path of first image at that location
 
             for i, spread_data in enumerate(spreads):
                 # Check for cancellation
@@ -550,11 +564,13 @@ Create a consistent character sheet showing various poses and expressions."""
                     spread_desc = spread_data.get('illustration_prompt', '')
                     page_text = spread_data.get('page_text', '')
                     page_num = spread_data.get('page_num', i + 1)
+                    scene_location = spread_data.get('location', '').strip()
                 else:
                     # Backwards compatibility
                     spread_desc = spread_data
                     page_text = ''
                     page_num = i + 1
+                    scene_location = ''
 
                 # Add story context to the prompt
                 story_context = f"""
@@ -571,14 +587,24 @@ Page Text (the verse for this illustration):
 
                 if char_path and spread_desc:
                     spread_path = art_dir / f"scene_{i+1:02d}.png"
+                    # Use first image of this location as additional reference for furniture consistency
+                    additional_refs = []
+                    if scene_location and scene_location in location_reference_images:
+                        additional_refs = [location_reference_images[scene_location]]
+                        log.info(f"Scene {i+1}: passing location reference for '{scene_location}' from {location_reference_images[scene_location]}")
                     try:
                         _, spath = pipeline.generate_illustration(
                             story_context,
                             char_path,
                             illustration_type="spread",
                             output_path=spread_path,
-                            style=art_style_for_pipeline
+                            style=art_style_for_pipeline,
+                            additional_references=additional_refs
                         )
+                        # Register first image for this location
+                        if scene_location and scene_location not in location_reference_images:
+                            location_reference_images[scene_location] = spath
+                            log.info(f"Scene {i+1}: registered first image for location '{scene_location}'")
                         results["spreads"].append(str(spath))
                         yield f"data: {json.dumps({'stage': 'spread_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete! Waiting for your approval...', 'image_path': f'scene_{i+1:02d}.png'})}\n\n"
                         approved = yield from wait_for_approval('spread', i + 1, f'scene_{i+1:02d}.png')
