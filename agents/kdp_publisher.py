@@ -86,6 +86,7 @@ class KDPPublisher:
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
         self.session_file = Path("kdp_session.json")
+        self._temp_profile_dir = None  # Track temp profile for cleanup
         logger.info(f"KDPPublisher initialized (headless={headless}, debug={debug}, chrome_profile={use_chrome_profile})")
 
     def __enter__(self):
@@ -216,6 +217,29 @@ class KDPPublisher:
         except Exception as e:
             logger.warning(f"Could not connect to Chrome remote debugging: {e}")
 
+        # Try Chrome profile if enabled
+        if self.use_chrome_profile:
+            chrome_data_dir = self._find_chrome_profile()
+            if chrome_data_dir:
+                temp_profile = self._copy_chrome_profile_to_temp(chrome_data_dir)
+                if temp_profile:
+                    try:
+                        logger.info(f"Launching browser with Chrome profile from {temp_profile}")
+                        self._temp_profile_dir = temp_profile
+                        self.context = self.playwright.chromium.launch_persistent_context(
+                            user_data_dir=temp_profile,
+                            headless=False,
+                            channel="chromium",
+                        )
+                        self.browser = None  # persistent context acts as both browser and context
+                        self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
+                        logger.info("Browser started with Chrome profile successfully")
+                        return
+                    except Exception as e:
+                        logger.warning(f"Failed to launch with Chrome profile: {e}")
+            else:
+                logger.warning("Chrome profile not found, falling back to fresh browser")
+
         # Fallback: fresh Playwright browser with optional session file
         logger.info("Launching fresh Playwright browser...")
         self.browser = self.playwright.chromium.launch(headless=self.headless)
@@ -236,6 +260,15 @@ class KDPPublisher:
             self.browser.close()
         if self.playwright:
             self.playwright.stop()
+        # Clean up temp profile directory
+        if self._temp_profile_dir:
+            import shutil
+            try:
+                shutil.rmtree(self._temp_profile_dir, ignore_errors=True)
+                logger.info(f"Cleaned up temp profile: {self._temp_profile_dir}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temp profile: {e}")
+            self._temp_profile_dir = None
         logger.info("Browser stopped")
 
     def _log_action(self, action: str, details: str = ""):
