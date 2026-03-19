@@ -386,7 +386,40 @@ def api_art():
         total_images = 2 + len(art_package['spreads'])  # char sheet + cover + spreads + back
         current = 0
 
+        def clear_approval_markers():
+            """Remove any stale approval markers from previous runs."""
+            for marker in book_dir.glob(".cover_approved"):
+                marker.unlink(missing_ok=True)
+            for marker in book_dir.glob(".spread_*_approved"):
+                marker.unlink(missing_ok=True)
+
+        def wait_for_approval(image_type, index, image_path):
+            """Pause generation and yield awaiting_approval until user approves. Returns False if cancelled."""
+            if image_type == 'cover':
+                marker = book_dir / ".cover_approved"
+            else:
+                marker = book_dir / f".spread_{index:02d}_approved"
+
+            marker.unlink(missing_ok=True)  # Clear any stale marker
+
+            # Keep yielding awaiting_approval as heartbeat while waiting
+            timeout = 60 * 60  # 1 hour max wait
+            start = time.time()
+            while not marker.exists():
+                if book_id in cancelled_jobs:
+                    return False
+                if time.time() - start > timeout:
+                    return False
+                yield f"data: {json.dumps({'stage': 'awaiting_approval', 'image_type': image_type, 'index': index, 'image_path': image_path, 'current': current, 'total': total_images, 'message': f'Waiting for approval of {image_type}...'})}\n\n"
+                time.sleep(3)
+
+            yield f"data: {json.dumps({'stage': 'approved', 'image_type': image_type, 'index': index, 'message': f'{image_type.capitalize()} approved!'})}\n\n"
+            return True
+
         try:
+            # Clear stale approval markers from any previous run
+            clear_approval_markers()
+
             # Check for debug mode
             debug_mode = get_debug_mode()
             if debug_mode:
@@ -488,7 +521,11 @@ Create a consistent character sheet showing various poses and expressions."""
                         style=art_style_for_pipeline
                     )
                     results["cover"] = str(cpath)
-                    yield f"data: {json.dumps({'stage': 'cover_done', 'current': current, 'total': total_images, 'message': 'Cover complete!', 'image_path': 'cover.png'})}\n\n"
+                    yield f"data: {json.dumps({'stage': 'cover_done', 'current': current, 'total': total_images, 'message': 'Cover complete! Waiting for your approval...', 'image_path': 'cover.png'})}\n\n"
+                    approved = yield from wait_for_approval('cover', 0, 'cover.png')
+                    if not approved:
+                        yield f"data: {json.dumps({'stage': 'cancelled', 'message': 'Generation stopped.'})}\n\n"
+                        return
                 except Exception as e:
                     results["failed_images"].append(f"cover: {str(e)}")
                     yield f"data: {json.dumps({'stage': 'cover_error', 'current': current, 'total': total_images, 'message': f'Cover failed: {str(e)}'})}\n\n"
@@ -543,7 +580,11 @@ Page Text (the verse for this illustration):
                             style=art_style_for_pipeline
                         )
                         results["spreads"].append(str(spath))
-                        yield f"data: {json.dumps({'stage': 'spread_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete!', 'image_path': f'scene_{i+1:02d}.png'})}\n\n"
+                        yield f"data: {json.dumps({'stage': 'spread_done', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} complete! Waiting for your approval...', 'image_path': f'scene_{i+1:02d}.png'})}\n\n"
+                        approved = yield from wait_for_approval('spread', i + 1, f'scene_{i+1:02d}.png')
+                        if not approved:
+                            yield f"data: {json.dumps({'stage': 'cancelled', 'message': 'Generation stopped.'})}\n\n"
+                            return
                     except Exception as e:
                         results["failed_images"].append(f"spread_{i+1}: {str(e)}")
                         yield f"data: {json.dumps({'stage': 'spread_error', 'current': current, 'total': total_images, 'message': f'Illustration {i+1} failed: {str(e)}'})}\n\n"
