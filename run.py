@@ -345,11 +345,15 @@ def api_art():
     if eye_style:
         char_description += f"\n\nEYE STYLE: {eye_style}"
 
-    # Build spreads with full context (illustration prompt + page text)
+    # Build spreads with full context (illustration prompt + composition + page text)
     spreads_with_context = []
     for i, scene in enumerate(scenes):
         page_text = "\n".join(scene.get('text', []))
-        illustration_prompt = build_prompt(scene.get('illustration_prompt', ''))
+        base_illus = scene.get('illustration_prompt', '')
+        composition = scene.get('composition', '')
+        if composition:
+            base_illus += f"\n\nCOMPOSITION & LAYOUT: {composition}"
+        illustration_prompt = build_prompt(base_illus)
         spreads_with_context.append({
             "page_num": i + 1,
             "illustration_prompt": illustration_prompt,

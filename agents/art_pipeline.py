@@ -893,13 +893,19 @@ CRITICAL CONSISTENCY REQUIREMENTS - Character must match reference exactly:
 - Eyes: IDENTICAL shape, size, color, and style as reference
 - EYES MUST have large round irises with TWO small bright white highlight dots (one larger, one smaller) - NOT solid black eyes
 - Nose: IDENTICAL shape and size as reference
-- Skin tone: EXACT same shade as reference (do not lighten or darken)
-- Hair: IDENTICAL color, length, style, and texture as reference
-- Clothing: Same outfit with same colors as reference
+- Skin/fur: EXACT same color, pattern, and markings as reference (do not lighten, darken, or change)
+- Hair/fur style: IDENTICAL color, length, style, and texture as reference
+- Clothing/outfit: EXACT same outfit as shown in the character reference — same colors, same garment types, no substitutions
 - Body proportions: Consistent with reference
 
+PHYSICAL COHERENCE RULES (MUST FOLLOW):
+- Limbs, tails, and body parts must NEVER clip through or poke through solid objects (furniture, blankets, walls, etc.)
+- If a character is under a blanket, only their head/face should be visible above it — no limbs jutting through
+- Furniture must be drawn in correct perspective with consistent orientation throughout the scene
+- Clothing must fully cover the character as designed — no missing garments, no garments clipping into body
+
 CONSTRAINTS:
-- Change ONLY the pose, expression, and scene - NOT the character's features
+- Change ONLY the pose, expression, and scene - NOT the character's features or outfit
 - NO text, words, letters, numbers, or writing of any kind in the image
 - Character should be the clear focal point
 - Maintain consistent art style throughout"""
@@ -945,8 +951,13 @@ PRESERVE EXACTLY from the reference:
 - Face shape and proportions
 - Eyes: identical shape, size, and color
 - Fur/skin/feather color and markings
-- Clothing and accessories
+- Clothing and outfit: EXACT same garments as the reference — no changes, no substitutions
 - Body proportions consistent with reference
+
+PHYSICAL COHERENCE (REQUIRED):
+- No body parts, limbs, or tails clipping through solid objects, furniture, or fabric
+- Furniture and room objects must be correctly oriented and in proper perspective
+- Blankets/coverings must drape naturally — no limbs poking through
 
 {prompt}"""
                     # Build list of image files - character sheet first, then additional refs
