@@ -1,0 +1,18 @@
+services:
+  bookfactory:
+    build: .
+    ports:
+      - "5555:5555"
+    volumes:
+      - ./output:/app/output
+      - ./config:/app/config
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    depends_on:
+      - bookfactory
+    restart: unless-stopped

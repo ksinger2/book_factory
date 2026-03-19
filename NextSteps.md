@@ -1,7 +1,25 @@
 # Book Factory - Session Context & Next Steps
 
-> **Last Updated:** 2026-03-18
-> **Session ID:** session-20260318a
+> **Last Updated:** 2026-03-19
+> **Session ID:** session-20260319a
+
+---
+
+## Latest Changes (2026-03-19)
+
+### Docker Compose Deployment
+Set up production deployment with Docker Compose for auto-restart and Cloudflare tunnel integration.
+
+**What was done:**
+- **Dockerfile** — Python 3.11-slim image, installs deps from requirements.txt, runs `run.py`
+- **docker-compose.yml** — Two services: `bookfactory` (Flask app) + `tunnel` (Cloudflare cloudflared)
+- **Auto-restart** — Both services use `restart: unless-stopped`, start on boot
+- **.env.example** — Template for API keys and tunnel token
+- **.dockerignore** / **.gitignore** — Exclude secrets, venv, output, logs
+- **run.py fix** — Added `BOOKFACTORY_HOST` env var (defaults to `127.0.0.1`, Docker sets `0.0.0.0`) so Flask binds correctly inside the container
+
+**Files added:** `Dockerfile`, `docker-compose.yml`, `.env.example`, `.dockerignore`, `.gitignore`
+**Files modified:** `run.py` (host binding), `config/studio_config.yaml` (comment cleanup)
 
 ---
 
@@ -269,7 +287,7 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 
 **Issues:**
 - Word count validation slightly tight (289 vs 300 minimum in some stories)
-- ARCHITECTURE.md still references Claude API (now uses OpenAI)
+- ~~ARCHITECTURE.md still references Claude API (now uses OpenAI)~~ (Fixed 2026-03-19)
 
 **Next Steps:**
 1. Adjust word count minimum to 280-290 (more realistic for GPT-4o)
@@ -436,18 +454,20 @@ Based on manual KDP publish attempt for Priscilla's book, added:
 
 ### Priority 4: Technical Debt
 10. Fix rhyme validation algorithm (too many false positives)
-11. Update ARCHITECTURE.md (Claude → OpenAI references)
+11. ~~Update ARCHITECTURE.md (Claude → OpenAI references)~~ (Done 2026-03-19)
 12. Add macOS font path support to PDF builder
 
 ---
 
 ## Quick Reference
 
-**Start Dashboard:** `python run.py` → http://localhost:5555
+**Start Everything (Docker):** `docker compose up -d` → auto-starts on boot
+- Dashboard: http://localhost:5555
+- External: https://bookfactory.backtoirl.com (via Cloudflare tunnel)
+- Logs: `docker compose logs -f`
+- Stop: `docker compose down`
 
-**External Access:**
-- URL: https://bookfactory.backtoirl.com
-- Start tunnel: `cloudflared tunnel run bookfactory`
+**Start Dashboard (manual):** `python run.py` → http://localhost:5555
 
 **Configuration:** `config/studio_config.yaml`
 

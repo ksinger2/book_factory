@@ -40,7 +40,7 @@ Key insight for discoverability as a new author:
 Output: `niche_report.json` with ranked opportunities
 
 ### 2. Story Engine (`agents/story_engine.py`)
-Uses Claude API to generate complete story packages.
+Uses OpenAI GPT-4o (or GPT-4o-mini in debug mode) to generate complete story packages.
 
 Input: niche brief (theme, age range, animal, lesson)
 Output:
@@ -120,7 +120,7 @@ python3 studio.py --no-publish             # Everything except KDP upload
 All in `config/studio_config.yaml`:
 ```yaml
 openai_api_key: "sk-..."
-anthropic_api_key: "sk-..."  # for Claude story generation
+anthropic_api_key: "sk-..."  # for KDP marketing agent (Claude)
 kdp_email: "..."
 kdp_password: "..."
 
@@ -168,7 +168,7 @@ research:
 | Component | Cost |
 |-----------|------|
 | OpenAI gpt-image-1 (15 images @ ~$0.08 each) | ~$1.20 |
-| Claude API (story generation) | ~$0.10 |
+| OpenAI GPT-4o (story generation) | ~$0.10 |
 | Amazon KDP | Free (they take % of sale) |
 | **Total per book** | **~$1.30** |
 
@@ -176,17 +176,44 @@ At $4.99 eBook (70% = $3.47 royalty) + $9.99 paperback ($1.79 royalty):
 - Break even: 1 sale
 - 10 books/day × 30 days = 300 books × even 1 sale each = $1,578/mo royalties
 
+## Deployment
+
+Docker Compose runs two services with auto-restart on boot:
+
+```yaml
+services:
+  bookfactory:    # Flask app on port 5555
+    build: .
+    restart: unless-stopped
+
+  tunnel:         # Cloudflare tunnel → bookfactory.backtoirl.com
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+```
+
+**Quick start:** `cp .env.example .env && docker compose up -d`
+
+The `.env` file holds API keys and tunnel token (not committed — see `.env.example` for template).
+
+`output/` and `config/` are bind-mounted so data persists outside the container.
+
 ## File Structure
 
 ```
 book-factory/
 ├── studio.py                 # Main orchestrator
+├── run.py                    # Flask web server (dashboard)
+├── Dockerfile                # Python 3.11-slim container
+├── docker-compose.yml        # bookfactory + cloudflare tunnel
+├── .env.example              # Template for API keys & tunnel token
+├── .dockerignore             # Exclude secrets/venv from Docker build
+├── .gitignore                # Exclude secrets/venv/output from git
 ├── ARCHITECTURE.md           # This file
 ├── config/
 │   └── studio_config.yaml    # All configuration
 ├── agents/
 │   ├── niche_researcher.py   # Amazon niche analysis
-│   ├── story_engine.py       # Claude-powered story gen
+│   ├── story_engine.py       # GPT-4o story generation
 │   ├── art_pipeline.py       # OpenAI image generation + QA
 │   ├── pdf_builder.py        # ReportLab PDF assembly
 │   └── kdp_publisher.py      # Playwright KDP automation

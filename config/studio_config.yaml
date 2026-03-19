@@ -1,10 +1,5 @@
-# Global settings
 global:
-  # Master switch for debug/cost-saving mode across all agents
-  # When true: uses cheaper models (gpt-4o-mini, dall-e-2), skips QA
-  # Saves ~80% on API costs during testing
   debug_mode: false
-
 kdp:
   use_chrome_profile: false
   chrome_profile_name: Profile 2
@@ -27,7 +22,6 @@ art:
   quality: medium
   retries: 3
   qa_enabled: true
-  # Art-specific debug mode (overridden by global.debug_mode if that is true)
   debug_mode: false
 research:
   min_bsr: 100000
@@ -45,7 +39,6 @@ pipeline:
   skip_publish: false
   auto_upload_art: false
 coloring:
-  # Coloring-specific debug mode (overridden by global.debug_mode if that is true)
   debug_mode: false
   defaults:
     age_level: adult

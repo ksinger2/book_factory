@@ -1,19 +1,41 @@
 # Book Factory — Quick Start
 
-## Setup (one time)
+## Setup with Docker (recommended)
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys and Cloudflare tunnel token
+docker compose up -d
+```
+
+That's it. The dashboard auto-starts on boot and is available at:
+- **Local:** http://localhost:5555
+- **External:** https://bookfactory.backtoirl.com (via Cloudflare tunnel)
+
+Useful commands:
+```bash
+docker compose logs -f       # Watch logs
+docker compose down           # Stop everything
+docker compose up -d --build  # Rebuild after code changes
+```
+
+## Setup without Docker (manual)
+
 ```bash
 cd ~/Desktop/book-factory
-pip3 install pyyaml requests beautifulsoup4 openai anthropic reportlab pillow playwright
+pip3 install -r requirements.txt
 playwright install chromium
-export ANTHROPIC_API_KEY="sk-ant-..."
 export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+python run.py
 ```
 
 ## Open the Dashboard
-```bash
-open dashboard.html
-```
+
 Walk through each step: Setup → Research → Brief → Style → Export → Generate.
+
+- **Local:** http://localhost:5555
+- **External (tunnel):** https://bookfactory.backtoirl.com
 
 ## CLI Commands
 | Command | What it does |
