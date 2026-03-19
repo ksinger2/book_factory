@@ -712,7 +712,7 @@ Return as JSON:
     "categories": ["Children's Books > Animals", "Children's Books > Emotions & Feelings"]
 }}"""
 
-        response = self._call_api(system_prompt, user_prompt, max_tokens=3072)
+        response = self._call_api(system_prompt, user_prompt, max_tokens=4096)
 
         listing_data = self._parse_json_response(response, "listing")
 

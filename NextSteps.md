@@ -23,6 +23,15 @@ All 5 domain agents have synchronized. Summary:
 
 ## Latest Changes (2026-03-18)
 
+### Listing JSON Token Limit Increase
+Increased `max_tokens` for listing generation from 3072 → 4096 to prevent JSON truncation.
+
+**Problem:** `Failed to parse listing JSON: Expecting ',' delimiter` — GPT was still truncating listing JSON mid-stream at 3072 tokens when descriptions contained multiple paragraphs, bullet points, and SEO content.
+
+**Fix:** `agents/story_engine.py` line 715 — `max_tokens=3072` → `max_tokens=4096`
+
+This now matches the token limit used for story generation (line 504).
+
 ### Story Engine Capitalization Fix
 Removed brittle hardcoded capitalization post-processing and strengthened LLM prompts instead:
 
@@ -43,8 +52,8 @@ Removed brittle hardcoded capitalization post-processing and strengthened LLM pr
 ### Bug Fixes — Story Generation (QA verified, live tested)
 
 #### Fix 1: Listing JSON parse crash (root cause found)
-**Problem:** `Failed to parse listing JSON: Expecting ',' delimiter` — listing prompt with 6 scene summaries was hitting the 2048 token cap and GPT was truncating the JSON mid-stream. No amount of repair logic can fix a truncated response.
-**Solution:** Increased listing `max_tokens` from 2048 → 3072.
+**Problem:** `Failed to parse listing JSON: Expecting ',' delimiter` — listing prompt with 6 scene summaries was hitting the token cap and GPT was truncating the JSON mid-stream. No amount of repair logic can fix a truncated response.
+**Solution:** Increased listing `max_tokens` from 2048 → 3072 → 4096 (final).
 
 #### Fix 2: JSON repair fallback hardening
 **Solution:** Added `json-repair` library as 4th-stage fallback in `_parse_json_response` (handles unescaped quotes in description strings). Added to `requirements.txt`.
@@ -59,7 +68,7 @@ Removed brittle hardcoded capitalization post-processing and strengthened LLM pr
 - Live story generation test: `ok: true`, 12 scenes, listing parsed (1134 chars), capitalization correct
 
 **Files Modified:**
-- `agents/story_engine.py` — listing max_tokens 2048→3072, json-repair fallback, capitalization rules
+- `agents/story_engine.py` — listing max_tokens 2048→4096, json-repair fallback, capitalization rules
 - `resources/grammar_guide.txt` — simplified capitalization rules
 - `requirements.txt` — added json-repair
 
