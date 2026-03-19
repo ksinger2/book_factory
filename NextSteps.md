@@ -1,11 +1,23 @@
 # Book Factory - Session Context & Next Steps
 
 > **Last Updated:** 2026-03-19
-> **Session ID:** session-20260319a
+> **Session ID:** session-20260319b
 
 ---
 
 ## Latest Changes (2026-03-19)
+
+### Chrome Profile Integration for KDP Publisher
+Wired up the existing but unused Chrome profile methods so the publisher can reuse your Amazon login from Chrome instead of requiring manual login every time.
+
+**What was done:**
+- **`agents/kdp_publisher.py` `start()`** — After CDP fails, checks `use_chrome_profile` flag → finds Chrome profile → copies to temp dir → launches with `launch_persistent_context()` (Playwright's API for user data dirs). Falls through to fresh browser on any failure.
+- **`agents/kdp_publisher.py` `stop()`** — Cleans up temp profile directory after browser closes
+- **`run.py`** — Both `/api/publish` and `/api/coloring/publish` now read `kdp.use_chrome_profile` from config instead of hardcoding `True`. Default is `false` (no behavior change unless you flip it in config).
+
+**Files modified:** `agents/kdp_publisher.py` (start/stop), `run.py` (publish endpoints)
+
+**Config:** Set `kdp.use_chrome_profile: true` in `config/studio_config.yaml` to enable.
 
 ### Docker Compose Deployment
 Set up production deployment with Docker Compose for auto-restart and Cloudflare tunnel integration.
@@ -377,16 +389,17 @@ Based on manual KDP publish attempt for Priscilla's book, improved `_fill_conten
 - Metadata automation (title, description, keywords, categories)
 - Pricing and KDP Select enrollment
 - Dry-run mode for testing
-- Chrome profile support for pre-authenticated sessions
+- **Chrome profile integration** — copies user's Chrome profile to temp dir, launches with `launch_persistent_context()` to reuse Amazon login (2026-03-19)
 - **Content tab automation** (ISBN, print options, cover finish)
 
 **Configuration:**
-- use_chrome_profile: false (currently disabled)
+- use_chrome_profile: false (read from config, default false)
 - chrome_profile_name: Profile 2
 - Author: "Starlit Stories Press"
 - Price: $9.99 paperback, $4.99 eBook
 
 **Recent Activity:**
+- 2026-03-19: Chrome profile integration wired up (was dead code before)
 - 2026-03-14: Content tab automation improved based on manual testing
 - Manual publish attempt revealed missing automation steps
 - **ZERO** publish_result.json files found (never completed end-to-end)
