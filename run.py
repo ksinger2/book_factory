@@ -363,6 +363,7 @@ def api_art():
     art_package = {
         "title": story.get('title', 'Untitled'),
         "character_name": character.get('name', 'Character'),
+        "character_species": char_species,
         "character_description": char_description,
         "cover_scene": build_prompt(scenes[0].get('illustration_prompt', '')) if scenes else '',
         "spreads": spreads_with_context,
@@ -425,7 +426,9 @@ def api_art():
                 _, char_path = pipeline.generate_character_sheet(
                     art_package["character_description"],
                     char_sheet_path,
-                    style=art_style_for_pipeline
+                    style=art_style_for_pipeline,
+                    character_name=art_package["character_name"],
+                    character_species=art_package.get("character_species", "")
                 )
                 results["character_sheet"] = str(char_path)
                 all_character_sheets[char_name] = char_path
@@ -631,7 +634,9 @@ def api_charsheet():
                     char_sheet_path,
                     style=art_style,
                     guidance=guidance,
-                    guidance_reference=guidance_reference_image
+                    guidance_reference=guidance_reference_image,
+                    character_name=char_name,
+                    character_species=character.get('species', '')
                 )
 
                 result_box["char_path"] = char_path

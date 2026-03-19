@@ -207,13 +207,15 @@ Format as a single paragraph description suitable for an artist. START WITH SKIN
             logger.error(f"Error analyzing reference image: {e}")
             return None
 
-    def _analyze_character_sheet(self, char_sheet_path: Path) -> Optional[str]:
+    def _analyze_character_sheet(self, char_sheet_path: Path, character_name: str = "", character_species: str = "") -> Optional[str]:
         """
         Analyze a generated character sheet to extract detailed visual description.
         This description is then used in all scene illustrations for consistency.
 
         Args:
             char_sheet_path: Path to the character sheet image
+            character_name: Name of the character (e.g. "Oliver")
+            character_species: Species of the character (e.g. "red panda")
 
         Returns:
             Detailed character description string, or None if analysis fails
@@ -222,7 +224,17 @@ Format as a single paragraph description suitable for an artist. START WITH SKIN
             with open(char_sheet_path, 'rb') as f:
                 image_data = base64.b64encode(f.read()).decode('utf-8')
 
-            analysis_prompt = """Analyze this character sheet and create a CHARACTER DNA description that will be copy-pasted into every subsequent image prompt to ensure PERFECT consistency.
+            # Build species header so the DNA always starts with an unambiguous declaration
+            species_header = ""
+            if character_name or character_species:
+                species_header = f"""CRITICAL — THIS CHARACTER'S IDENTITY (must appear at top of DNA output):
+CHARACTER NAME: {character_name or "Unknown"}
+CHARACTER SPECIES/TYPE: {character_species or "Unknown"} — THIS IS NOT A HUMAN
+The CHARACTER DNA output MUST begin with: "CHARACTER: {character_name} the {character_species}" before any other details.
+
+"""
+
+            analysis_prompt = f"""{species_header}Analyze this character sheet and create a CHARACTER DNA description that will be copy-pasted into every subsequent image prompt to ensure PERFECT consistency.
 
 Extract and describe EVERY detail with EXACT specifications. Use descriptive, specific terms (not vague ones).
 
@@ -591,14 +603,18 @@ IMPORTANT: Only include characters that appear in AT LEAST 2 different scenes. S
             sheets[main_character_name] = main_sheet_path
             # Analyze for visual guide
             if not self.character_visual_guide:
-                self.character_visual_guide = self._analyze_character_sheet(main_sheet_path)
+                self.character_visual_guide = self._analyze_character_sheet(
+                    main_sheet_path,
+                    character_name=main_character_name
+                )
         else:
             logger.info(f"Generating main character sheet: {main_character_name}")
             try:
                 _, sheet_path = self.generate_character_sheet(
                     main_character_desc,
                     main_sheet_path,
-                    style=style
+                    style=style,
+                    character_name=main_character_name
                 )
                 sheets[main_character_name] = sheet_path
             except Exception as e:
@@ -641,7 +657,9 @@ maintaining the same art style as the main book."""
         output_path: Optional[Path] = None,
         style: Optional[str] = None,
         guidance: Optional[str] = None,
-        guidance_reference: Optional[str] = None
+        guidance_reference: Optional[str] = None,
+        character_name: str = "",
+        character_species: str = ""
     ) -> Tuple[str, Path]:
         """
         Generate a character reference sheet with multiple poses and expressions.
@@ -785,7 +803,11 @@ Preserve their EXACT features in the illustrated character:
                     logger.info("Skipping character sheet analysis in debug mode")
                 else:
                     logger.info("Analyzing character sheet for visual consistency...")
-                    self.character_visual_guide = self._analyze_character_sheet(output_path)
+                    self.character_visual_guide = self._analyze_character_sheet(
+                        output_path,
+                        character_name=character_name,
+                        character_species=character_species
+                    )
                     if self.character_visual_guide:
                         logger.info("Character visual guide extracted successfully")
 
