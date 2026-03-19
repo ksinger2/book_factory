@@ -487,7 +487,10 @@ Generate a complete story package with:
 - Composition notes for artists (landscape/portrait, character placement, background details)
 - Text positioning (where text should go relative to the illustration)
 
-IMPORTANT: Each illustration_prompt MUST begin with the art style description to ensure visual consistency.
+IMPORTANT — ILLUSTRATION PROMPTS:
+- Every illustration_prompt MUST explicitly name the character's species every time (e.g. "Oliver the red panda sits on a log..." NOT "Oliver sits on a log...")
+- NEVER refer to an animal character as a human, boy, girl, man, woman, or person in illustration prompts
+- Always describe the character using their species first (e.g. "the red panda", "the rabbit", "the bear cub")
 
 Return as JSON with this structure:
 {{

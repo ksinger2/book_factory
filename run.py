@@ -318,15 +318,25 @@ def api_art():
 
     # Build prompts with style, character, restrictions, and hard rules
     def build_prompt(base_prompt):
-        prompt = base_prompt
-        # Inject hard rules at the TOP - must be followed strictly
+        prompt = ""
+        # Hard rules FIRST
         if hard_rules:
-            prompt = f"=== STRICT RULES - MUST FOLLOW ===\n{hard_rules}\n=== END STRICT RULES ===\n\n{prompt}"
+            prompt += f"=== STRICT RULES - MUST FOLLOW ===\n{hard_rules}\n=== END STRICT RULES ===\n\n"
+        # Character block at the TOP so model treats it as highest priority
+        if character_block:
+            species_hint = f" (a {char_species})" if char_species else ""
+            prompt += (
+                f"=== CHARACTER (DO NOT CHANGE SPECIES OR FORM) ===\n"
+                f"Main character: {char_name}{species_hint}. "
+                f"{'Species: ' + char_species + '. ' if char_species else ''}"
+                f"MUST be drawn as a {char_species if char_species else char_name}, NOT as a human.\n"
+                f"{char_desc}\n"
+                f"=== END CHARACTER ===\n\n"
+            )
         if art_style:
-            # Extract just the positive style elements (remove any NOT statements)
             style_clean = ' '.join([s for s in art_style.split('.') if 'NOT' not in s.upper()])
-            prompt = f"{style_clean}\n\n{prompt}"
-        prompt += character_block
+            prompt += f"{style_clean}\n\n"
+        prompt += base_prompt
         prompt += restrictions
         return prompt
 

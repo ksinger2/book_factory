@@ -926,16 +926,27 @@ CONSTRAINTS:
                     # Use images.edit with character sheet as reference for consistency
                     logger.info(f"Using images.edit with character sheet for {illustration_type}")
                     # Prepend character reference instruction
-                    ref_prompt = f"""CHARACTER REFERENCE: The attached image shows the character that must appear in this scene.
+                    # Extract species/character type from visual guide or DNA for species lock
+                    species_lock = ""
+                    if self.character_visual_guide:
+                        species_lock = f"\nCHARACTER DNA:\n{self.character_visual_guide}\n"
 
-CRITICAL - Preserve these features EXACTLY from the reference:
-- Face shape: Same exact proportions
-- Eyes: Identical shape, size, and color
-- Nose: Same shape and size
-- Skin tone: Exact same shade
-- Hair: Same color, style, length, and texture
-- Clothing: Same outfit and colors
-- Body proportions: Consistent with reference
+                    ref_prompt = f"""CHARACTER REFERENCE: The attached image shows the EXACT character that must appear in this scene.
+
+=== CRITICAL SPECIES LOCK ===
+The character in the reference image is the ONLY valid depiction of this character.
+- DO NOT draw a human if the reference shows an animal
+- DO NOT draw an animal if the reference shows a human
+- The character's SPECIES, FORM, and BODY TYPE must be IDENTICAL to the reference image
+- If the character is a red panda, fox, rabbit, bear, etc. — draw that exact species, NOT a human
+{species_lock}
+PRESERVE EXACTLY from the reference:
+- Species and body form (MOST CRITICAL — cannot change)
+- Face shape and proportions
+- Eyes: identical shape, size, and color
+- Fur/skin/feather color and markings
+- Clothing and accessories
+- Body proportions consistent with reference
 
 {prompt}"""
                     # Build list of image files - character sheet first, then additional refs
