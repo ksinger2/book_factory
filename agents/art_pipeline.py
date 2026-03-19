@@ -80,7 +80,7 @@ class ArtPipeline:
                     "pass api_key parameter."
                 )
 
-        self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key, timeout=180.0)  # 3 min timeout; default 600s causes freezes
         self.debug_mode = debug_mode
 
         # Use cheaper models and settings in debug mode

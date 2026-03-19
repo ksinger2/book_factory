@@ -590,54 +590,78 @@ def api_charsheet():
     art_dir.mkdir(exist_ok=True)
 
     def generate_charsheet():
+        import threading
         from agents.art_pipeline import ArtPipeline
 
-        try:
-            # Check for debug mode
-            debug_mode = get_debug_mode()
-            if debug_mode:
-                log.info("Character sheet generation running in DEBUG MODE")
+        result_box = {"char_path": None, "visual_guide": None, "error": None, "done": False}
 
-            pipeline = ArtPipeline(
-                style=art_style,
-                eye_style=eye_style,
-                reference_image=reference_image,
-                hard_rules=hard_rules,
-                debug_mode=debug_mode
-            )
+        def run_generation():
+            try:
+                debug_mode = get_debug_mode()
+                if debug_mode:
+                    log.info("Character sheet generation running in DEBUG MODE")
 
-            yield f"data: {json.dumps({'stage': 'charsheet_start', 'message': 'Generating character sheet...'})}\n\n"
+                pipeline = ArtPipeline(
+                    style=art_style,
+                    eye_style=eye_style,
+                    reference_image=reference_image,
+                    hard_rules=hard_rules,
+                    debug_mode=debug_mode
+                )
 
-            char_sheet_path = art_dir / "character_sheets" / f"{char_name}_sheet.png"
-            char_sheet_path.parent.mkdir(parents=True, exist_ok=True)
+                char_sheet_path = art_dir / "character_sheets" / f"{char_name}_sheet.png"
+                char_sheet_path.parent.mkdir(parents=True, exist_ok=True)
 
-            _, char_path = pipeline.generate_character_sheet(
-                char_desc,
-                char_sheet_path,
-                style=art_style,
-                guidance=guidance,
-                guidance_reference=guidance_reference_image
-            )
+                _, char_path = pipeline.generate_character_sheet(
+                    char_desc,
+                    char_sheet_path,
+                    style=art_style,
+                    guidance=guidance,
+                    guidance_reference=guidance_reference_image
+                )
 
-            # Save character visual guide for later use by illustrations
-            art_result_path = book_dir / "art_result.json"
-            art_result = {}
-            if art_result_path.exists():
-                with open(art_result_path) as f:
-                    art_result = json.load(f)
+                result_box["char_path"] = char_path
+                result_box["visual_guide"] = getattr(pipeline, 'character_visual_guide', '')
+            except Exception as e:
+                log.exception("Character sheet generation failed")
+                result_box["error"] = str(e)
+            finally:
+                result_box["done"] = True
 
-            art_result["character_sheet"] = str(char_path)
-            art_result["character_visual_guide"] = getattr(pipeline, 'character_visual_guide', '')
+        yield f"data: {json.dumps({'stage': 'charsheet_start', 'message': 'Generating character sheet...'})}\n\n"
 
-            with open(art_result_path, 'w') as f:
-                json.dump(art_result, f, indent=2, default=str)
+        t = threading.Thread(target=run_generation, daemon=True)
+        t.start()
 
-            image_path = f"character_sheets/{char_name}_sheet.png"
-            yield f"data: {json.dumps({'stage': 'charsheet_done', 'message': 'Character sheet complete!', 'image_path': image_path})}\n\n"
+        heartbeat_count = 0
+        while not result_box["done"]:
+            time.sleep(5)
+            heartbeat_count += 1
+            yield f"data: {json.dumps({'stage': 'charsheet_working', 'message': f'Still generating... ({heartbeat_count * 5}s)'})}\n\n"
 
-        except Exception as e:
-            log.exception("Character sheet generation failed")
-            yield f"data: {json.dumps({'stage': 'charsheet_error', 'message': str(e)})}\n\n"
+        t.join(timeout=5)
+
+        if result_box["error"]:
+            yield f"data: {json.dumps({'stage': 'charsheet_error', 'message': result_box['error']})}\n\n"
+            return
+
+        char_path = result_box["char_path"]
+
+        # Save character visual guide for later use by illustrations
+        art_result_path = book_dir / "art_result.json"
+        art_result = {}
+        if art_result_path.exists():
+            with open(art_result_path) as f:
+                art_result = json.load(f)
+
+        art_result["character_sheet"] = str(char_path)
+        art_result["character_visual_guide"] = result_box["visual_guide"] or ''
+
+        with open(art_result_path, 'w') as f:
+            json.dump(art_result, f, indent=2, default=str)
+
+        image_path = f"character_sheets/{char_name}_sheet.png"
+        yield f"data: {json.dumps({'stage': 'charsheet_done', 'message': 'Character sheet complete!', 'image_path': image_path})}\n\n"
 
     return Response(generate_charsheet(), mimetype='text/event-stream')
 
@@ -1295,9 +1319,10 @@ def api_publish():
 
         # Start publisher and publish
         log.info(f"Starting KDP publish for: {book_listing.title}")
+        use_chrome = cfg.get('kdp', {}).get('use_chrome_profile', False)
         chrome_profile_name = cfg.get('kdp', {}).get('chrome_profile_name', 'Profile 2')
         try:
-            with KDPPublisher(use_chrome_profile=True, chrome_profile_name=chrome_profile_name) as publisher:
+            with KDPPublisher(use_chrome_profile=use_chrome, chrome_profile_name=chrome_profile_name) as publisher:
                 result = publisher.publish_book(book_package)
             return jsonify({"ok": True, "book_id": book_id, "result": result})
         except Exception as browser_error:
@@ -2025,10 +2050,11 @@ def api_coloring_publish():
         )
 
         log.info(f"Starting KDP publish for coloring book: {book_listing.title}")
+        use_chrome = cfg.get('kdp', {}).get('use_chrome_profile', False)
         chrome_profile_name = cfg.get('kdp', {}).get('chrome_profile_name', 'Profile 2')
 
         try:
-            with KDPPublisher(use_chrome_profile=True, chrome_profile_name=chrome_profile_name) as publisher:
+            with KDPPublisher(use_chrome_profile=use_chrome, chrome_profile_name=chrome_profile_name) as publisher:
                 result = publisher.publish_book(book_package)
             return jsonify({"ok": True, "book_id": book_id, "result": result})
         except Exception as browser_error:
