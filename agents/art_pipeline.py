@@ -230,7 +230,13 @@ OUTPUT FORMAT - Use this exact structure:
 
 CHARACTER DNA:
 
-SKIN: [Use descriptive terms like "warm caramel-brown" or "peachy cream" or "deep mahogany" - NOT just "brown" or "light"]
+SKIN/FUR:
+- Body fur/skin color: [exact color like "warm russet-orange" or "deep red-brown" - NOT just "orange" or "brown"]
+- Face markings: [e.g. "cream/white muzzle and cheek patches", "dark eye mask", etc.]
+- Underbelly: [color of chest/belly area if different from body]
+- Paws/feet/hands color: [EXACT color — e.g. "dark chocolate brown paws", "black feet", "same russet-orange as body" — this must be specified precisely and consistently]
+- Tail: [color, pattern, length — e.g. "bushy striped tail with alternating rust and dark brown rings"]
+- Any other markings: [spots, stripes, patches, etc. with exact colors]
 
 FACE SHAPE: [round/oval/square/heart-shaped with specific details about proportions]
 
@@ -243,7 +249,7 @@ EYES:
 
 NOSE: [button/straight/upturned - specific shape AND size]
 
-HAIR:
+HAIR (if applicable):
 - Color: [specific like "jet black" or "warm copper-orange" - NOT just "brown"]
 - Texture: [straight/wavy/curly/coily]
 - Style: [how it's worn - pigtails/loose/braided/short spiky]
@@ -254,14 +260,15 @@ BODY: [age-appropriate build and proportions]
 CLOTHING:
 - Top: [exact item with specific color]
 - Bottom: [exact item with specific color]
-- Footwear: [exact item with specific color]
+- Footwear: [exact item with specific color — if barefoot/paws visible, note that]
 - Accessories: [any items that should always be present]
 
 DISTINGUISHING FEATURES: [freckles/dimples/birthmarks/signature items]
 
 ART STYLE: [watercolor/digital/flat vector - describe the illustration style]
 
-Keep descriptions concise but EXACT. Every detail you specify will be used to maintain consistency across all book illustrations."""
+Keep descriptions concise but EXACT. Every detail you specify will be used to maintain consistency across all book illustrations.
+PAY SPECIAL ATTENTION to paw/feet/hand coloring — this is a common inconsistency point."""
 
             for attempt in range(3):
                 try:
@@ -893,7 +900,10 @@ CRITICAL CONSISTENCY REQUIREMENTS - Character must match reference exactly:
 - Eyes: IDENTICAL shape, size, color, and style as reference
 - EYES MUST have large round irises with TWO small bright white highlight dots (one larger, one smaller) - NOT solid black eyes
 - Nose: IDENTICAL shape and size as reference
-- Skin/fur: EXACT same color, pattern, and markings as reference (do not lighten, darken, or change)
+- Skin/fur body color: EXACT same color and pattern as reference (do not lighten, darken, or change)
+- Face markings: IDENTICAL — same muzzle color, eye mask, cheek patches, etc.
+- Paws/feet/hands: EXACT same color as shown in the character reference — do NOT change paw color between scenes (e.g. if paws are dark brown in the reference, they must be dark brown in EVERY scene, not orange or any other color)
+- Tail: IDENTICAL color, pattern, and markings as reference
 - Hair/fur style: IDENTICAL color, length, style, and texture as reference
 - Clothing/outfit: EXACT same outfit as shown in the character reference — same colors, same garment types, no substitutions
 - Body proportions: Consistent with reference
@@ -950,7 +960,9 @@ PRESERVE EXACTLY from the reference:
 - Species and body form (MOST CRITICAL — cannot change)
 - Face shape and proportions
 - Eyes: identical shape, size, and color
-- Fur/skin/feather color and markings
+- Body fur/skin color and all markings (face mask, underbelly, patches)
+- Paws/feet/hands: EXACT same color as the reference — do NOT vary paw color between scenes
+- Tail: identical color, pattern, and markings
 - Clothing and outfit: EXACT same garments as the reference — no changes, no substitutions
 - Body proportions consistent with reference
 
