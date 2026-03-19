@@ -278,10 +278,20 @@ class StoryEngine:
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
 1. CAPITALIZATION (Standard English Rules):
-   - Capitalize ONLY the first word of each sentence
+   - Capitalize ONLY the first word of a NEW SENTENCE (ends with period, exclamation, or question mark)
    - Capitalize proper nouns: character names (Luna, Felix), place names (Paris, California)
-   - Do NOT capitalize common words mid-sentence, even if they seem important
+   - Do NOT capitalize the first word of a new LINE unless it is also the start of a new SENTENCE
+   - A comma at the end of a line does NOT make the next line a new sentence — keep it lowercase
    - Exception: ALL CAPS may be used sparingly for emphasis (e.g., "You can do it!")
+
+   WRONG:
+   "Oliver the red panda woke up one bright day,
+   He felt a sense of wonder and wanted to play."
+   (WRONG because "He" follows a comma — not a new sentence)
+
+   RIGHT:
+   "Oliver the red panda woke up one bright day,
+   he felt a sense of wonder and wanted to play."
 
    WRONG: "The Happy Penguin Loved To Dance"
    RIGHT: "The happy penguin loved to dance"
@@ -334,9 +344,10 @@ Format your response as valid JSON."""
 
 GRAMMAR & WRITING RULES (MUST FOLLOW):
 1. CAPITALIZATION (Standard English Rules):
-   - Capitalize ONLY the first word of each sentence
+   - Capitalize ONLY the first word of a NEW SENTENCE (ends with period, exclamation, or question mark)
    - Capitalize proper nouns: character names (Luna, Felix), place names (Paris, California)
-   - Do NOT capitalize common words mid-sentence, even if they seem important
+   - Do NOT capitalize the first word of a new LINE unless it is also the start of a new SENTENCE
+   - A comma at the end of a line does NOT make the next line a new sentence — keep it lowercase
    - Exception: ALL CAPS may be used sparingly for emphasis (e.g., "You can do it!")
 
    WRONG: "The Happy Penguin Loved To Dance"
